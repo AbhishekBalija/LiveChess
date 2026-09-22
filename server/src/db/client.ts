@@ -48,7 +48,9 @@ export async function persistIngestResult(
     });
     await tx.insert(outboxEvents).values({
       eventType: result.outbox.eventType,
-      payload: result.outbox.payload,
+      // The publisher reads rows without joining moves, so the payload
+      // carries the game identity it needs for stream and cache keys.
+      payload: { gameId, ...result.outbox.payload },
     });
   });
 }

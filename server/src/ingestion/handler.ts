@@ -75,7 +75,13 @@ export function applyMoveReceived(
       move,
       outbox: {
         eventType: "GameCorrected",
-        payload: { ply: input.ply, oldSan: existing.san, newSan: input.san, version },
+        payload: {
+          ply: input.ply,
+          oldSan: existing.san,
+          newSan: input.san,
+          fen: input.fen,
+          version,
+        },
       },
     };
   }
