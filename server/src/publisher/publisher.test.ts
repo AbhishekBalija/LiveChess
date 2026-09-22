@@ -49,13 +49,19 @@ describe("publisher mapping", () => {
 });
 
 describe("seam 2 contract", () => {
-  it("only the publisher touches Redis", () => {
+  it("only the publisher writes to Redis; the gateway only reads", () => {
     const out = execSync(
       "grep -rl 'ioredis\\|from \"redis\"' src --include='*.ts' | grep -v '.test.ts' || true",
       { encoding: "utf8" },
     );
     const files = out.split("\n").map((l) => l.trim()).filter(Boolean);
-    expect(files).toEqual(["src/publisher/index.ts"]);
+    // Writer (XADD + HSET) and reader (XREADGROUP + XACK) are the only
+    // Redis touchpoints. Move Handler, adapter, and db layers stay clean.
+    expect(files.sort()).toEqual(["src/gateway/index.ts", "src/publisher/index.ts"]);
+    const gateway = execSync("grep -n 'xadd\\|hset' src/gateway/index.ts || true", {
+      encoding: "utf8",
+    }).trim();
+    expect(gateway).toBe("");
   });
 });
 
