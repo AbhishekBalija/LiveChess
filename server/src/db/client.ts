@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { IngestOutcome } from "../ingestion/handler";
@@ -33,7 +33,9 @@ export async function persistIngestResult(
       await tx
         .update(moves)
         .set({ superseded: true })
-        .where(eq(moves.gameId, gameId));
+        .where(
+          and(eq(moves.gameId, gameId), eq(moves.ply, result.move.ply)),
+        );
     }
     await tx.insert(moves).values({
       gameId,

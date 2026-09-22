@@ -27,6 +27,9 @@ describe("slice 1 schema", () => {
     expect(indexCols).toEqual(
       expect.arrayContaining(["game_id", "ply", "source"]),
     );
+    // Partial index: superseded history rows are exempt, so a correction
+    // can coexist with the row it replaces.
+    expect(config.indexes[0]?.config.where).toBeDefined();
   });
 
   it("outbox id is monotonic bigint, not uuid", () => {

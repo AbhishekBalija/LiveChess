@@ -8,6 +8,13 @@
       "when": 1790103971174,
       "tag": "0000_wandering_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790105007302,
+      "tag": "0001_thin_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

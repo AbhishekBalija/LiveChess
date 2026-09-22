@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -53,7 +54,13 @@ export const moves = pgTable(
     superseded: boolean("superseded").notNull().default(false),
     source: text("source").notNull(),
   },
-  (t) => [uniqueIndex("moves_identity_idx").on(t.gameId, t.ply, t.source)],
+  // One live row per identity key. Superseded history rows are exempt,
+  // otherwise a correction could never coexist with the row it replaces.
+  (t) => [
+    uniqueIndex("moves_identity_idx")
+      .on(t.gameId, t.ply, t.source)
+      .where(sql`"moves"."superseded" = false`),
+  ],
 );
 
 // Monotonic bigserial id so the publisher polls in happened-order.
