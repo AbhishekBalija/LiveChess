@@ -6,6 +6,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- Unused `server/src/ingestion/events.ts` zod schemas.
+
 ### Added
 - "Starting soon" on home: rounds starting within a week, from Lichess's
   broadcast list, with local start time and countdown (`GET /upcoming`,
@@ -43,6 +46,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   client lint, typecheck, tests and build.
 
 ### Fixed
+- Numeric env settings are validated at startup: a typo like
+  `INGEST_INTERVAL_MS=3s` used to become NaN and hot-loop against Lichess.
+- The gateway drops malformed WebSocket frames instead of throwing.
+- An illegal move in a relayed PGN keeps the legal moves before it instead
+  of skipping the whole game on every poll.
+- The publisher's poll uses a partial index on unpublished outbox rows, so it
+  stays fast as history grows.
 - Flaky publisher integration test: test files now run one at a time,
   since they share one database and one Redis stream.
 - Tests default to Redis database 1, so they no longer write into the

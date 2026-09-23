@@ -1,9 +1,10 @@
 import { Redis } from "ioredis";
+import { envInt } from "../env";
 import { db } from "../db/client";
 import { pollOnce } from "./publisher";
 
 // Separate Bun process. Polls continuously; each cycle is one pollOnce.
-const INTERVAL_MS = Number(process.env["PUBLISHER_INTERVAL_MS"] ?? 500);
+const INTERVAL_MS = envInt("PUBLISHER_INTERVAL_MS", 500, { min: 100 });
 
 const redis = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379");
 

@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { envInt } from "../env";
 import { db, persistIngestResultTx, persistTruncateTx, type Db, type DbTx } from "../db/client";
 import { games, moves, tournaments } from "../db/schema";
 import { applyMoveReceived, applyTruncate, planTruncation, type GameState } from "./handler";
@@ -489,7 +490,7 @@ if (import.meta.main) {
   await announceLichessAuth(nodeHttp, token, "ingest");
   if (poll) {
     // Fallback: the old 3s polling of the round export.
-    const intervalMs = Number(process.env["INGEST_INTERVAL_MS"] ?? 3000);
+    const intervalMs = envInt("INGEST_INTERVAL_MS", 3000, { min: 1000 });
     await runWorker(db(), nodeHttp, roundId, intervalMs);
   } else {
     await runStreamWorker(db(), nodeHttp, fetchStream(USER_AGENT, token), roundId);

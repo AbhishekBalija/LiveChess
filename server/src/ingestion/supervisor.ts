@@ -1,4 +1,5 @@
 import { and, isNotNull, eq, lt, sql } from "drizzle-orm";
+import { envInt } from "../env";
 import { db, type Db } from "../db/client";
 import { games } from "../db/schema";
 import { fetchStream, type StreamPort } from "./stream";
@@ -201,10 +202,10 @@ if (import.meta.main) {
   const token = lichessToken();
   await announceLichessAuth(nodeHttp, token, "supervisor");
   const opts: Required<SupervisorOptions> = {
-    maxRounds: Number(process.env["SUPERVISOR_MAX_ROUNDS"] ?? 8),
-    streamSlots: Number(process.env["SUPERVISOR_STREAM_SLOTS"] ?? (token ? 8 : 2)),
-    discoverMs: Number(process.env["SUPERVISOR_DISCOVER_MS"] ?? 5 * 60_000),
-    pollMs: Number(process.env["INGEST_INTERVAL_MS"] ?? 3000),
+    maxRounds: envInt("SUPERVISOR_MAX_ROUNDS", 8, { min: 1, max: 50 }),
+    streamSlots: envInt("SUPERVISOR_STREAM_SLOTS", token ? 8 : 2, { min: 0, max: 32 }),
+    discoverMs: envInt("SUPERVISOR_DISCOVER_MS", 5 * 60_000, { min: 30_000 }),
+    pollMs: envInt("INGEST_INTERVAL_MS", 3000, { min: 1000 }),
   };
   console.log(`supervisor: following up to ${opts.maxRounds} rounds, ${opts.streamSlots} streamed`);
   await new Supervisor(db(), nodeHttp, fetchStream(USER_AGENT, token), opts).run();
