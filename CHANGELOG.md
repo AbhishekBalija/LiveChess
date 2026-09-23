@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Takebacks (ADR 0004): when a broadcast fixes a move and drops later
+  plies, those plies are superseded, the board rewinds, and clients get a
+  `GameTruncated` event (and trim on resync if they missed it).
 - CI on every pull request and push to main: server typecheck and tests
   (integration tests run against Postgres and Redis service containers),
   client lint, typecheck, tests and build.

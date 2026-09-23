@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyMoveReceived, emptyGame } from "./handler";
+import { applyMoveReceived, applyTruncate, emptyGame, planTruncation, START_FEN } from "./handler";
 import {
   broadcastSlugs,
   gameSourceId,
@@ -149,5 +149,56 @@ describe("move handler core", () => {
     const src = readFileSync(new URL("./handler.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/from\s+["'][^"']*redis[^"']*["']/i);
     expect(src).not.toMatch(/require\s*\([^)]*redis[^)]*\)/i);
+  });
+});
+
+describe("takebacks (ADR 0004)", () => {
+  function stateWith(sans: string[]) {
+    const state = emptyGame();
+    sans.forEach((san, i) => {
+      applyMoveReceived(state, { ply: i + 1, san, fen: `fen-${i + 1}`, clock: null, source: "lichess" });
+    });
+    return state;
+  }
+  const incoming = (sans: string[]) => sans.map((san, i) => ({ ply: i + 1, san }));
+
+  it("needs nothing when the PGN only grows", () => {
+    expect(planTruncation(stateWith(["e4", "e5"]), incoming(["e4", "e5", "Nf3"]))).toBeNull();
+  });
+
+  it("needs nothing for a correction on the last ply", () => {
+    expect(planTruncation(stateWith(["e4", "e5"]), incoming(["e4", "c5"]))).toBeNull();
+  });
+
+  it("truncates to the changed ply when later plies exist", () => {
+    const state = stateWith(["e4", "e5", "Nf3", "Nc6"]);
+    expect(planTruncation(state, incoming(["e4", "c5"]))).toBe(2);
+    expect(planTruncation(state, incoming(["e4", "c5", "Nf3", "d6"]))).toBe(2);
+  });
+
+  it("truncates to the PGN length when the PGN just gets shorter", () => {
+    expect(planTruncation(stateWith(["e4", "e5", "Nf3"]), incoming(["e4"]))).toBe(1);
+    expect(planTruncation(stateWith(["e4", "e5"]), [])).toBe(0);
+  });
+
+  it("drops later plies, rewinds the position and bumps Version once", () => {
+    const state = stateWith(["e4", "e5", "Nf3", "Nc6"]);
+    const t = applyTruncate(state, 2);
+    expect(t).toMatchObject({ outcome: "truncated", toPly: 2, fen: "fen-2", lastSan: "e5", version: 5 });
+    expect(t.outbox).toEqual({ eventType: "GameTruncated", payload: { ply: 2, fen: "fen-2", version: 5 } });
+    expect([...state.moves.keys()]).toEqual([1, 2]);
+    expect(state.version).toBe(5);
+  });
+
+  it("rewinds to the start position when every ply goes", () => {
+    const t = applyTruncate(stateWith(["e4"]), 0);
+    expect(t).toMatchObject({ toPly: 0, fen: START_FEN, lastSan: "" });
+  });
+
+  it("a correction after a truncation continues the Version sequence", () => {
+    const state = stateWith(["e4", "e5", "Nf3"]);
+    applyTruncate(state, 2);
+    const fix = applyMoveReceived(state, { ply: 2, san: "c5", fen: "fen-2b", clock: null, source: "lichess" });
+    expect(fix).toMatchObject({ outcome: "correction", version: 5 });
   });
 });

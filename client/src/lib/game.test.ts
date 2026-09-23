@@ -167,3 +167,52 @@ describe("applyEvent", () => {
     expect(state.moves.size).toBe(2)
   })
 })
+
+describe("takebacks (ADR 0004)", () => {
+  const four = (): GameState =>
+    fromSnapshot(
+      snapshot({
+        version: 4,
+        fen: "fen-4",
+        lastMove: { ply: 4, san: "Nc6" },
+        missedMoves: [
+          { ply: 1, san: "e4", fen: "fen-1", version: 1 },
+          { ply: 2, san: "e5", fen: "fen-2", version: 2 },
+          { ply: 3, san: "Nf3", fen: "fen-3", version: 3 },
+          { ply: 4, san: "Nc6", fen: "fen-4", version: 4 },
+        ],
+      }),
+    )
+
+  it("parses a GameTruncated event back to the start position", () => {
+    const raw = { type: "GameTruncated", gameId: GID, ply: "0", san: "", fen: "start", version: "9" }
+    expect(parseLiveEvent(GID, raw)).toMatchObject({ type: "GameTruncated", ply: 0, version: 9 })
+    expect(parseLiveEvent(GID, { ...raw, type: "MoveReceived" })).toBeNull()
+  })
+
+  it("GameTruncated drops later plies and rewinds the board", () => {
+    const out = applyEvent(four(), event({ type: "GameTruncated", ply: 2, san: "", fen: "fen-2", version: 5 }))
+    if ("resync" in out) throw new Error("unexpected resync")
+    expect([...out.state.moves.keys()]).toEqual([1, 2])
+    expect(out.state).toMatchObject({ version: 5, fen: "fen-2", lastPly: 2 })
+  })
+
+  it("a correction after the truncation lands on the rewound board", () => {
+    const t = applyEvent(four(), event({ type: "GameTruncated", ply: 2, san: "", fen: "fen-2", version: 5 }))
+    if ("resync" in t) throw new Error("unexpected resync")
+    const c = applyEvent(t.state, event({ type: "GameCorrected", ply: 2, san: "c5", fen: "fen-2b", version: 6 }))
+    if ("resync" in c) throw new Error("unexpected resync")
+    expect(c.state.moves.get(2)?.san).toBe("c5")
+    expect(c.state).toMatchObject({ fen: "fen-2b", lastPly: 2 })
+  })
+
+  it("resync trims plies a missed takeback removed", () => {
+    const next = applyResync(
+      four(),
+      snapshot({ version: 6, fen: "fen-2b", lastMove: { ply: 2, san: "c5" }, missedMoves: [{ ply: 2, san: "c5", fen: "fen-2b", version: 6 }] }),
+    )
+    expect([...next.moves.keys()].sort()).toEqual([1, 2])
+    expect(next.moves.get(2)?.san).toBe("c5")
+    expect(next).toMatchObject({ lastPly: 2, version: 6 })
+  })
+})

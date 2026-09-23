@@ -148,3 +148,27 @@ describe.runIf(URL)("publisher integration", () => {
     await expect(pollOnce(database, port)).resolves.toBe(0);
   });
 });
+
+describe("buildWrites for a takeback", () => {
+  it("streams the truncation point and rewinds the cache to the checkpoint", () => {
+    const writes = buildWrites({
+      eventType: "GameTruncated",
+      payload: {
+        gameId: "g1",
+        ply: 2,
+        fen: "fen-2",
+        version: 6,
+        checkpoint: { fen: "fen-2", lastPly: 2, lastSan: "e5", version: 6 },
+      },
+    });
+    expect(writes.stream).toEqual({
+      type: "GameTruncated",
+      gameId: "g1",
+      ply: "2",
+      san: "",
+      fen: "fen-2",
+      version: "6",
+    });
+    expect(writes.cache).toEqual({ fen: "fen-2", version: "6", lastPly: "2", lastSan: "e5" });
+  });
+});
