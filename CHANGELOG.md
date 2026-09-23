@@ -7,6 +7,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Streaming ingestion: the worker holds the Lichess round stream open
+  instead of polling, cutting lag from 20 to 30 seconds on large rounds
+  to a few seconds. Reconnects with backoff, stops when the round ends.
+  `--poll` keeps the old path as a fallback.
 - Takebacks (ADR 0004): when a broadcast fixes a move and drops later
   plies, those plies are superseded, the board rewinds, and clients get a
   `GameTruncated` event (and trim on resync if they missed it).

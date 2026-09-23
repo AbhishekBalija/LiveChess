@@ -16,7 +16,10 @@ import {
   type HttpResponse,
   type TourCache,
   normalizeResult,
+  roundFinished,
+  runStreamWorker,
 } from "./worker";
+import { StreamRateLimitedError, type StreamPort } from "./stream";
 
 function response(
   status: number,
@@ -361,5 +364,61 @@ describe("normalizeResult", () => {
     expect(normalizeResult("*")).toBe("*");
     expect(normalizeResult(undefined)).toBe("*");
     expect(normalizeResult("?")).toBe("*");
+  });
+});
+
+describe.runIf(URL)("stream worker integration", () => {
+  it("rides out a 429, ingests the dump plus an update, and stops when the round ends", async () => {
+    const sql = postgres(URL as string);
+    const database: Db = drizzle(sql, { schema });
+    const ids = ["cccccccc", "dddddddd"];
+    const stale = await database.select({ id: games.id }).from(games).where(inArray(games.sourceId, ids));
+    for (const { id } of stale) {
+      await database.delete(moves).where(eq(moves.gameId, id));
+    }
+    await database.delete(games).where(inArray(games.sourceId, ids));
+
+    const live = game("cccccccc", "Echo", "Foxtrot", "1. e4 e5 *");
+    const update = game("cccccccc", "Echo", "Foxtrot", "1. e4 e5 2. Nf3 1-0").replace("[Black", '[Result "1-0"]\n[Black');
+    const done = game("dddddddd", "Golf", "Hotel", "1. d4 d5 1/2-1/2").replace("[Black", '[Result "1/2-1/2"]\n[Black');
+
+    let opens = 0;
+    const stream: StreamPort = {
+      async open() {
+        opens += 1;
+        if (opens === 1) throw new StreamRateLimitedError();
+        // Initial dump of both games, then one live update; then the
+        // server closes, and every game now has a final result.
+        async function* body(): AsyncIterable<string> {
+          yield `${live}\n\n\n${done.slice(0, 30)}`;
+          yield `${done.slice(30)}\n\n\n `;
+          yield `${update}\n\n\n`;
+        }
+        return body();
+      },
+    };
+
+    await runStreamWorker(database, fakeHttp(() => ""), stream, "rrrrrrrr", {
+      rateLimitMs: 5,
+      finishCheckMs: 5,
+    });
+
+    expect(opens).toBe(2);
+    const rows = await database
+      .select({ sourceId: games.sourceId, lastPly: games.lastPly, result: games.result })
+      .from(games)
+      .where(inArray(games.sourceId, ids));
+    const bySource = Object.fromEntries(rows.map((r) => [r.sourceId, r]));
+    expect(bySource["cccccccc"]).toMatchObject({ lastPly: 3, result: "1-0" });
+    expect(bySource["dddddddd"]).toMatchObject({ lastPly: 2, result: "1/2-1/2" });
+    await sql.end();
+  });
+});
+
+describe("roundFinished", () => {
+  it("is true only when every seen game has a final result", () => {
+    expect(roundFinished(new Map())).toBe(false);
+    expect(roundFinished(new Map([["a", "1-0"], ["b", "*"]]))).toBe(false);
+    expect(roundFinished(new Map([["a", "1-0"], ["b", "0-1"]]))).toBe(true);
   });
 });

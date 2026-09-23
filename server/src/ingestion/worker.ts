@@ -3,6 +3,15 @@ import { db, persistIngestResultTx, persistTruncateTx, type Db, type DbTx } from
 import { games, moves, tournaments } from "../db/schema";
 import { applyMoveReceived, applyTruncate, planTruncation, type GameState } from "./handler";
 import {
+  backoffMs,
+  consumePgnStream,
+  fetchStream,
+  roundStreamUrl,
+  StreamRateLimitedError,
+  withIdleTimeout,
+  type StreamPort,
+} from "./stream";
+import {
   broadcastSlugs,
   gameSourceId,
   parseBroadcastGame,
@@ -14,7 +23,7 @@ import {
 // Handler with Version and existing moves loaded from Postgres, one
 // transaction per game. Restarts are safe and re-polls are no-ops.
 
-const USER_AGENT = "LiveChess/1.0 (slice-1 ingestion; poll, not stream)";
+const USER_AGENT = "LiveChess/1.0 (broadcast ingestion)";
 
 export const roundPgnUrl = (roundId: string): string =>
   `https://lichess.org/api/broadcast/round/${roundId}.pgn`;
@@ -237,52 +246,65 @@ export interface TourCache {
   tournamentId: string | null;
 }
 
+// One game's full PGN: resolve the tournament once, upsert the game, run
+// every ply through the Move Handler. Shared by polling and streaming.
+// Returns null for a game we cannot use (unparseable, no source id).
+export async function ingestPgnGame(
+  database: Db,
+  http: HttpPort,
+  roundId: string,
+  pgn: string,
+  tourCache: TourCache,
+): Promise<(GameCounts & { sourceId: string; result: string }) | null> {
+  let game: ReturnType<typeof parseBroadcastGame>;
+  try {
+    game = parseBroadcastGame(pgn);
+  } catch (err) {
+    console.warn("skipping unparseable game", err);
+    return null;
+  }
+  const sourceId = gameSourceId(game.headers);
+  if (!sourceId) {
+    console.warn("skipping game without a GameURL or Site id");
+    return null;
+  }
+  if (tourCache.tournamentId === null) {
+    const slugs = broadcastSlugs(game.headers);
+    const eventName = game.headers["Event"] ?? roundId;
+    const tour = slugs
+      ? await fetchTourInfo(http, slugs.tourSlug, slugs.roundSlug, roundId, eventName)
+      : { sourceId: `round-${roundId}`, name: eventName };
+    tourCache.tournamentId = await upsertTournament(database, tour.sourceId, tour.name);
+  }
+  const result = normalizeResult(game.headers["Result"]);
+  const gameId = await upsertGame(
+    database,
+    tourCache.tournamentId,
+    sourceId,
+    game.headers["White"] ?? "?",
+    game.headers["Black"] ?? "?",
+    result,
+  );
+  const counts = await ingestGame(database, gameId, game.plies);
+  return { ...counts, sourceId, result };
+}
+
 export async function ingestRound(
   database: Db,
   http: HttpPort,
   roundId: string,
-  tourCache?: TourCache,
+  tourCache: TourCache = { tournamentId: null },
 ): Promise<PollCounts> {
   const pgn = await fetchRoundPgn(http, roundId);
-  const parts = splitPgnGames(pgn);
   const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, truncations: 0, noops: 0 };
-  let tournamentId = tourCache?.tournamentId ?? null;
-  for (const part of parts) {
-    let game: ReturnType<typeof parseBroadcastGame>;
-    try {
-      game = parseBroadcastGame(part);
-    } catch (err) {
-      console.warn("skipping unparseable game", err);
-      continue;
-    }
-    const sourceId = gameSourceId(game.headers);
-    if (!sourceId) {
-      console.warn("skipping game without a GameURL or Site id");
-      continue;
-    }
-    if (tournamentId === null) {
-      const slugs = broadcastSlugs(game.headers);
-      const eventName = game.headers["Event"] ?? roundId;
-      const tour = slugs
-        ? await fetchTourInfo(http, slugs.tourSlug, slugs.roundSlug, roundId, eventName)
-        : { sourceId: `round-${roundId}`, name: eventName };
-      tournamentId = await upsertTournament(database, tour.sourceId, tour.name);
-      if (tourCache) tourCache.tournamentId = tournamentId;
-    }
-    const gameId = await upsertGame(
-      database,
-      tournamentId,
-      sourceId,
-      game.headers["White"] ?? "?",
-      game.headers["Black"] ?? "?",
-      normalizeResult(game.headers["Result"]),
-    );
-    const gameCounts = await ingestGame(database, gameId, game.plies);
+  for (const part of splitPgnGames(pgn)) {
+    const game = await ingestPgnGame(database, http, roundId, part, tourCache);
+    if (!game) continue;
     counts.games += 1;
-    counts.inserted += gameCounts.inserted;
-    counts.corrections += gameCounts.corrections;
-    counts.truncations += gameCounts.truncations;
-    counts.noops += gameCounts.noops;
+    counts.inserted += game.inserted;
+    counts.corrections += game.corrections;
+    counts.truncations += game.truncations;
+    counts.noops += game.noops;
   }
   return counts;
 }
@@ -315,6 +337,72 @@ export async function runWorker(
   }
 }
 
+// A round is over once every game we have seen has a final result.
+export function roundFinished(results: Map<string, string>): boolean {
+  return results.size > 0 && [...results.values()].every((r) => r !== "*");
+}
+
+export interface StreamWorkerOptions {
+  idleMs?: number;
+  finishCheckMs?: number;
+  rateLimitMs?: number;
+}
+
+// Default ingestion: hold the round stream open, reconnect with backoff,
+// stop when the round is over. Resolves when the round has finished.
+export async function runStreamWorker(
+  database: Db,
+  http: HttpPort,
+  stream: StreamPort,
+  roundId: string,
+  { idleMs = 90_000, finishCheckMs = 60_000, rateLimitMs = 60_000 }: StreamWorkerOptions = {},
+): Promise<void> {
+  const tourCache: TourCache = { tournamentId: null };
+  const results = new Map<string, string>();
+  let attempt = 0;
+  for (;;) {
+    const controller = new AbortController();
+    // Checked on a timer, not per game: the dump on connect sends games
+    // one by one, and a few finished ones first would look like the end.
+    const finishCheck = setInterval(() => {
+      if (roundFinished(results)) controller.abort();
+    }, finishCheckMs);
+    try {
+      const chunks = await stream.open(roundStreamUrl(roundId), controller.signal);
+      attempt = 0;
+      console.log(`stream ${roundId}: connected`);
+      await consumePgnStream(withIdleTimeout(chunks, idleMs, () => controller.abort()), async (pgn) => {
+        const game = await ingestPgnGame(database, http, roundId, pgn, tourCache);
+        if (!game) return;
+        results.set(game.sourceId, game.result);
+        if (game.inserted || game.corrections || game.truncations) {
+          console.log(
+            `stream ${roundId}: ${game.sourceId} +${game.inserted} moves, ~${game.corrections} corrections, -${game.truncations} takebacks`,
+          );
+        }
+      });
+      if (!controller.signal.aborted) console.warn(`stream ${roundId}: closed by server, reconnecting`);
+    } catch (err) {
+      if (err instanceof StreamRateLimitedError) {
+        console.warn(`stream ${roundId}: 429, waiting ${rateLimitMs}ms`);
+        clearInterval(finishCheck);
+        await sleep(rateLimitMs);
+        continue;
+      }
+      if (!controller.signal.aborted) console.error(`stream ${roundId}: failed, reconnecting`, err);
+    } finally {
+      clearInterval(finishCheck);
+    }
+    if (roundFinished(results)) {
+      console.log(`stream ${roundId}: round finished, stopping`);
+      return;
+    }
+    if (controller.signal.aborted) console.warn(`stream ${roundId}: idle for ${idleMs}ms, reconnecting`);
+    await sleep(backoffMs(attempt));
+    attempt += 1;
+  }
+}
+
 const nodeHttp: HttpPort = {
   async get(url: string, accept = "application/json"): Promise<HttpResponse> {
     const res = await fetch(url, {
@@ -331,11 +419,20 @@ const nodeHttp: HttpPort = {
 };
 
 if (import.meta.main) {
-  const roundId = process.argv[2];
+  const args = process.argv.slice(2);
+  const poll = args.includes("--poll");
+  const roundId = args.find((a) => !a.startsWith("--"));
   if (!roundId) {
-    console.error("usage: bun run ingest <broadcastRoundId>");
+    console.error("usage: bun run ingest <broadcastRoundId> [--poll]");
     process.exit(1);
   }
-  const intervalMs = Number(process.env["INGEST_INTERVAL_MS"] ?? 3000);
-  await runWorker(db(), nodeHttp, roundId, intervalMs);
+  if (poll) {
+    // Fallback: the old 3s polling of the round export.
+    const intervalMs = Number(process.env["INGEST_INTERVAL_MS"] ?? 3000);
+    await runWorker(db(), nodeHttp, roundId, intervalMs);
+  } else {
+    const token = process.env["LICHESS_TOKEN"] || undefined;
+    await runStreamWorker(db(), nodeHttp, fetchStream(USER_AGENT, token), roundId);
+    process.exit(0);
+  }
 }

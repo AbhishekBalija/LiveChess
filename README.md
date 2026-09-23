@@ -42,11 +42,16 @@ Instead of the simulator, point the worker at a Lichess broadcast round
 (round id from lichess.org/broadcast, 8 chars):
 
 ```sh
-cd server && bun run ingest <broadcastRoundId>   # polls every INGEST_INTERVAL_MS (default 3000)
+cd server && bun run ingest <broadcastRoundId>          # streams the round (default)
+cd server && bun run ingest <broadcastRoundId> --poll   # fallback: polls every INGEST_INTERVAL_MS (default 3000)
 ```
 
+The worker holds the Lichess round stream open, so moves arrive within a
+few seconds of Lichess. It reconnects on its own (every reconnect replays
+all games, and re-ingesting is a no-op), and it exits once every game has
+a result. Anonymous access allows 2 streams per IP; set `LICHESS_TOKEN`
+in `server/.env` for more.
+
 The worker upserts the tournament plus games and runs every ply through
-the Move Handler. Re-polls are no-ops and restarts continue Version from
-Postgres. Look up an ingested game id with
-`psql $DATABASE_URL -c "select id, white, black from games;"` and open
-http://localhost:5173/games/<id>.
+the Move Handler; restarts continue Version from Postgres. Live games
+show up on the home page at http://localhost:5173.
