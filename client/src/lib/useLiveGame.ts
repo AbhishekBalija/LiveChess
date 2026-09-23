@@ -33,7 +33,10 @@ export interface UseLiveGame {
 // subscribes FIRST, arrivals buffer while the snapshot is in flight,
 // then the snapshot applies and the buffer drains through applyEvent.
 // Gaps resync from the current version; closes reconnect with capped
-// backoff and resubscribe plus resync. No state library, plain useState.
+// backoff and resubscribe plus resync. Reconnects are scheduled only
+// from onclose, and resyncs serialize through one helper, so flaky
+// networks can neither leak sockets nor regress state. No state
+// library, plain useState.
 export function useLiveGame(gameId: string): UseLiveGame {
   const [state, setState] = useState<GameState | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>("loading")
@@ -46,10 +49,12 @@ export function useLiveGame(gameId: string): UseLiveGame {
       return
     }
     let cancelled = false
+    let dead = false
     let socket: WebSocket | null = null
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let attempts = 0
     let snapshotReady = false
+    let inflight: Promise<void> | null = null
     const buffer: unknown[] = []
     const current: { state: GameState | null } = { state: null }
 
@@ -57,6 +62,7 @@ export function useLiveGame(gameId: string): UseLiveGame {
       const res = await fetch(`${API_URL}/games/${gameId}/state?since_version=${since}`)
       if (cancelled) return
       if (res.status === 404) {
+        dead = true
         setNotFound(true)
         setStatus("error")
         socket?.close()
@@ -103,19 +109,31 @@ export function useLiveGame(gameId: string): UseLiveGame {
       }
     }
 
-    async function load(): Promise<void> {
-      snapshotReady = false
-      await fetchState(current.state?.version ?? 0)
-      if (cancelled) return
-      snapshotReady = true
-      attempts = 0
-      if (!cancelled) setStatus("live")
-      await drain()
-      if (!cancelled && current.state !== null) setStatus("live")
+    // The single serialized resync: concurrent callers share one flight,
+    // so overlapping resyncs can never apply out of order.
+    function resync(): Promise<void> {
+      if (inflight) return inflight
+      inflight = (async () => {
+        snapshotReady = false
+        try {
+          await fetchState(current.state?.version ?? 0)
+          if (cancelled || current.state === null) return
+          attempts = 0
+          await drain()
+          if (cancelled) return
+          snapshotReady = true
+          setStatus("live")
+        } finally {
+          inflight = null
+        }
+      })()
+      return inflight
     }
 
+    // onclose is the ONLY place that schedules a reconnect.
     function scheduleReconnect(): void {
-      if (cancelled) return
+      if (cancelled || dead) return
+      if (retryTimer) clearTimeout(retryTimer)
       if (current.state !== null) setStatus("reconnecting")
       const delay = Math.min(1000 * 2 ** attempts, 10000)
       attempts += 1
@@ -123,15 +141,15 @@ export function useLiveGame(gameId: string): UseLiveGame {
     }
 
     function connect(): void {
-      if (cancelled) return
+      if (cancelled || dead) return
+      socket?.close()
       if (current.state === null) setStatus("loading")
       const ws = new WebSocket(wsUrl(API_URL))
       socket = ws
       ws.onopen = () => {
         ws.send(JSON.stringify({ subscribe: gameId }))
-        void load().catch(() => {
+        void resync().catch(() => {
           ws.close()
-          scheduleReconnect()
         })
       }
       ws.onmessage = (msg) => {
@@ -146,23 +164,15 @@ export function useLiveGame(gameId: string): UseLiveGame {
           return
         }
         if (step(raw)) {
-          snapshotReady = false
-          void fetchState(current.state.version)
-            .then(() => drain())
-            .then(() => {
-              if (!cancelled) {
-                snapshotReady = true
-                setStatus("live")
-              }
-            })
-            .catch(() => {
-              ws.close()
-              scheduleReconnect()
-            })
+          buffer.unshift(raw)
+          void resync().catch(() => {
+            ws.close()
+          })
         }
       }
       ws.onclose = () => {
-        if (!cancelled) scheduleReconnect()
+        if (socket !== ws) return
+        scheduleReconnect()
       }
       ws.onerror = () => {
         ws.close()
@@ -171,18 +181,9 @@ export function useLiveGame(gameId: string): UseLiveGame {
 
     // Patchy mobile data: a regained network resyncs from the version.
     function regain(): void {
-      if (cancelled) return
+      if (cancelled || dead) return
       if (socket && socket.readyState === WebSocket.OPEN && current.state !== null) {
-        snapshotReady = false
-        void fetchState(current.state.version)
-          .then(() => drain())
-          .then(() => {
-            if (!cancelled) {
-              snapshotReady = true
-              setStatus("live")
-            }
-          })
-          .catch(() => {})
+        void resync().catch(() => {})
       } else if (!socket || socket.readyState === WebSocket.CLOSED) {
         if (retryTimer) clearTimeout(retryTimer)
         attempts = 0

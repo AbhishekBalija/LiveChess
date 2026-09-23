@@ -66,8 +66,11 @@ export function fromSnapshot(res: GameStateResponse): GameState {
 
 // Incremental snapshot (GET since_version=N): merge missed moves by ply,
 // a later version replacing an earlier one at the same ply, then take
-// version, position, and last move from the response.
+// version, position, and last move from the response. A snapshot older
+// than current state is stale (overlapping resyncs) and ignored outright,
+// so it can never regress version or position.
 export function applyResync(state: GameState, res: GameStateResponse): GameState {
+  if (res.version < state.version) return state
   const moves = new Map(state.moves)
   for (const m of res.missedMoves) {
     const prev = moves.get(m.ply)

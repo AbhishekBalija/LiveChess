@@ -89,6 +89,20 @@ describe("applyResync", () => {
     )
     expect(next.moves.get(1)?.san).toBe("e4")
   })
+
+  it("ignores a whole snapshot older than current state", () => {
+    const state = fromSnapshot(snapshot())
+    const next = applyResync(
+      state,
+      snapshot({
+        version: 1,
+        fen: "fen-older",
+        lastMove: { ply: 1, san: "e4" },
+        missedMoves: [{ ply: 1, san: "a3", fen: "fen-x", version: 1 }],
+      }),
+    )
+    expect(next).toBe(state)
+  })
 })
 
 describe("applyEvent", () => {
