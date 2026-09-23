@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- "Starting soon" on home: rounds starting within a week, from Lichess's
+  broadcast list, with local start time and countdown (`GET /upcoming`,
+  cached 5 minutes).
 - Apache-2.0 license with NOTICE, contributing guide, code of conduct,
   security policy, issue and pull request templates, README with
   screenshots, features and architecture.
