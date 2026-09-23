@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Apache-2.0 license with NOTICE, contributing guide, code of conduct,
+  security policy, issue and pull request templates, README with
+  screenshots, features and architecture.
 - Broadcast supervisor (#28): follows live Lichess rounds on its own
   (streams what the limit allows, polls the rest), gives every round a final
   pull when it ends, and finishes off rounds left with unfinished games.

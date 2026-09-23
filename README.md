@@ -1,8 +1,54 @@
 # LiveChess
 
 [![CI](https://github.com/AbhishekBalija/LiveChess/actions/workflows/ci.yml/badge.svg)](https://github.com/AbhishekBalija/LiveChess/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Universal live-chess coverage from grassroots to elite events, with real-time boards, eval, and AI commentary.
+**Every live chess game in one place, from grassroots opens to the Olympiad.**
+Real-time boards with ticking clocks, pulled automatically from Lichess
+broadcasts. "CREX, but for chess."
+
+<p align="center">
+  <img src="docs/images/home-desktop.png" alt="LiveChess home: competition tabs, live scoreboard cards with clocks, featured game" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/board-desktop.png" alt="Live board page with scoreboard, clocks and move list" width="72%">
+  <img src="docs/images/board-phone.png" alt="Live board on a phone" width="24%">
+</p>
+
+## Features
+
+- **Live boards, no refresh**: moves arrive over WebSocket seconds after they are played, and pieces slide into place.
+- **Ticking clocks**: the side to move's clock runs between moves, from each player's real `%clk`.
+- **Follows Lichess by itself**: a supervisor picks up every live broadcast round, streams it, and stores every result when it ends.
+- **Starting soon**: upcoming rounds with local start times and countdowns.
+- **Built for patchy mobile data**: resync by version after any gap, reconnect with backoff, takebacks and corrections handled.
+- **Each game its own board**: six board palettes, picked per game so a page of boards never looks the same.
+
+## How it works
+
+```mermaid
+flowchart LR
+  L[Lichess broadcast API] -->|round streams| S[Supervisor / ingest worker]
+  S -->|moves + outbox, one transaction| P[(Postgres)]
+  P -->|outbox rows| U[Publisher]
+  U -->|stream + cache| R[(Redis)]
+  R -->|consumer group| G[Gateway]
+  G -->|WebSocket live moves| C[Client]
+  C -->|GET /games/:id/state resync| G
+```
+
+Postgres is the source of truth; every move is versioned, and the client
+recovers from any gap by resyncing from its last version. Design decisions
+are recorded in [`docs/adr/`](docs/adr), the domain language in
+[`CONTEXT.md`](CONTEXT.md), and the plan in [`docs/roadmap.md`](docs/roadmap.md).
+
+## Tech stack
+
+- **Server**: Bun, TypeScript (strict), Postgres with Drizzle ORM, Redis Streams, zod, Vitest
+- **Client**: React, Vite, Tailwind CSS v4, shadcn/ui conventions, lucide-react
+- **Data**: Lichess broadcast API (free; a `study:read` token is recommended)
+- **CI**: GitHub Actions with Postgres and Redis service containers
 
 ## Run locally
 
@@ -87,3 +133,15 @@ in `server/.env` for more.
 The worker upserts the tournament plus games and runs every ply through
 the Move Handler; restarts continue Version from Postgres. Live games
 show up on the home page at http://localhost:5173.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup and the workflow, and [SECURITY.md](SECURITY.md) to report a
+vulnerability.
+
+## License
+
+[Apache License 2.0](LICENSE). Includes the Chessnut piece set by Alexis
+Luengas (Apache-2.0); see [NOTICE](NOTICE). Game data comes from the
+[Lichess API](https://lichess.org/api); LiveChess is not affiliated with Lichess.

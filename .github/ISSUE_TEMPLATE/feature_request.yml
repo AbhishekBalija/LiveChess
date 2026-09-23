@@ -1,0 +1,23 @@
+name: Feature request
+description: An idea to make LiveChess better
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is missing or hard today, from a fan's point of view?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you would like to see. Sketches and examples welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Links, similar features elsewhere, roadmap slice it fits.
