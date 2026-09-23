@@ -44,3 +44,12 @@ export interface GameListItem {
   version: number
   updatedAt: string
 }
+
+// One row of GET /upcoming (server/src/api/upcoming.ts).
+export interface UpcomingRound {
+  roundId: string
+  tournament: string
+  round: string
+  startsAt: string
+  url: string | null
+}

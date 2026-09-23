@@ -3,10 +3,12 @@ import { Link } from "react-router"
 import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
+import { UpcomingCard } from "@/components/UpcomingCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { useNow } from "@/lib/clock"
 import { splitTournamentName, surname } from "@/lib/names"
 import { formatMove, sideToMove } from "@/lib/ply"
+import { useUpcoming } from "@/lib/upcoming"
 import { useLiveGames } from "@/lib/useLiveGames"
 import type { GameListItem } from "@/types"
 
@@ -64,14 +66,17 @@ export function Home() {
         {tab.finished ? (
           <FinishedGames />
         ) : (
-          <LiveGames games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null} />
+          <LiveGames
+            games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null}
+            startingSoon={tab.id === "live" ? <StartingSoon /> : null}
+          />
         )}
       </main>
     </AppShell>
   )
 }
 
-function LiveGames({ games }: { games: GameListItem[] | null }) {
+function LiveGames({ games, startingSoon }: { games: GameListItem[] | null; startingSoon: ReactNode }) {
   const now = useNow()
   if (games === null) {
     return (
@@ -84,9 +89,12 @@ function LiveGames({ games }: { games: GameListItem[] | null }) {
   }
   if (games.length === 0) {
     return (
-      <p className="mx-4 rounded-lg border border-dashed border-line-strong px-4 py-12 text-center text-sm text-muted-foreground md:mx-8 lg:mx-12">
-        No live games right now.
-      </p>
+      <>
+        <p className="mx-4 rounded-lg border border-dashed border-line-strong px-4 py-12 text-center text-sm text-muted-foreground md:mx-8 lg:mx-12">
+          No live games right now.
+        </p>
+        {startingSoon}
+      </>
     )
   }
   const [featured, ...rest] = games
@@ -97,6 +105,7 @@ function LiveGames({ games }: { games: GameListItem[] | null }) {
           <MatchCard key={g.id} game={g} now={now} className="w-[300px] shrink-0 snap-start md:w-[330px]" />
         ))}
       </Strip>
+      {startingSoon}
       {featured && <Featured game={featured} />}
       {rest.length > 0 && (
         <section aria-labelledby="more-boards" className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
@@ -136,6 +145,25 @@ function FinishedGames() {
         </li>
       ))}
     </ul>
+  )
+}
+
+// Rounds that have not started yet. Hidden when there are none.
+function StartingSoon() {
+  const rounds = useUpcoming()
+  const now = useNow(30_000)
+  if (rounds.length === 0) return null
+  return (
+    <section aria-labelledby="starting-soon" className="flex flex-col gap-3">
+      <h2 id="starting-soon" className="px-4 text-[17px] font-bold md:px-8 md:text-lg lg:px-12">
+        Starting soon
+      </h2>
+      <Strip>
+        {rounds.map((r) => (
+          <UpcomingCard key={r.roundId} round={r} now={now} className="w-[260px] shrink-0 snap-start md:w-[280px]" />
+        ))}
+      </Strip>
+    </section>
   )
 }
 
