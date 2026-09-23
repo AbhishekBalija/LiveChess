@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fenToBoard, pieceGlyph } from "./fen"
+import { changedSquares, fenToBoard, pieceGlyph } from "./fen"
 
 const STARTPOS = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -22,10 +22,17 @@ describe("fenToBoard", () => {
 })
 
 describe("pieceGlyph", () => {
-  it("uses outline glyphs for White and filled for Black", () => {
-    expect(pieceGlyph("N")).toEqual({ glyph: "♘", side: "white" })
+  it("uses the filled glyph for both sides, tagged by color", () => {
+    expect(pieceGlyph("N")).toEqual({ glyph: "♞", side: "white" })
     expect(pieceGlyph("n")).toEqual({ glyph: "♞", side: "black" })
     expect(pieceGlyph("K").side).toBe("white")
     expect(pieceGlyph("k").side).toBe("black")
+  })
+})
+
+describe("changedSquares", () => {
+  it("returns the from and to squares of a move", () => {
+    const afterE4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    expect(changedSquares(STARTPOS, afterE4)).toEqual(new Set(["e2", "e4"]))
   })
 })

@@ -16,6 +16,8 @@ export interface GameState {
   fen: string
   lastPly: number
   moves: Map<number, LiveMove>
+  white?: string
+  black?: string
 }
 
 // Parsed server push. The gateway sends every value as a string;
@@ -61,6 +63,8 @@ export function fromSnapshot(res: GameStateResponse): GameState {
     fen: res.fen,
     lastPly: res.lastMove?.ply ?? 0,
     moves,
+    white: res.white,
+    black: res.black,
   }
 }
 
@@ -81,6 +85,9 @@ export function applyResync(state: GameState, res: GameStateResponse): GameState
     fen: res.fen,
     lastPly: res.lastMove?.ply ?? state.lastPly,
     moves,
+    // Fast-path resyncs omit names; keep the ones we already have.
+    white: res.white ?? state.white,
+    black: res.black ?? state.black,
   }
 }
 
@@ -101,6 +108,7 @@ export function applyEvent(state: GameState, ev: LiveEvent): EventOutcome {
   const advanced = ev.ply >= state.lastPly
   return {
     state: {
+      ...state,
       version: ev.version,
       fen: advanced ? ev.fen : state.fen,
       lastPly: advanced ? ev.ply : state.lastPly,

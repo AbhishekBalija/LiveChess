@@ -19,4 +19,7 @@ export interface GameStateResponse {
   fen: string
   lastMove: LastMove | null
   missedMoves: MissedMove[]
+  // Only on the Postgres path; a cache fast-path resync omits them.
+  white?: string
+  black?: string
 }

@@ -14,6 +14,8 @@ export interface GameCheckpoint {
   version: number;
   currentFen: string;
   lastPly: number;
+  white?: string;
+  black?: string;
 }
 
 export interface LiveMoveRow {
@@ -47,6 +49,10 @@ export interface GameStateResponse {
   fen: string;
   lastMove: LastMove | null;
   missedMoves: LiveMoveRow[];
+  // Postgres path only; the cache fast path omits them. The first load
+  // (since_version=0) always misses the fast path, so clients get names.
+  white?: string;
+  black?: string;
 }
 
 export class StateHttpError extends Error {
@@ -82,6 +88,8 @@ export function drizzleStateDb(database: Db): StateDbPort {
           version: games.version,
           currentFen: games.currentFen,
           lastPly: games.lastPly,
+          white: games.white,
+          black: games.black,
         })
         .from(games)
         .where(eq(games.id, gameId));
@@ -173,5 +181,7 @@ export async function getGameState(
     fen: game.currentFen,
     lastMove,
     missedMoves,
+    white: game.white,
+    black: game.black,
   };
 }

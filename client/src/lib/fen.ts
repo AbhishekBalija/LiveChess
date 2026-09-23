@@ -23,16 +23,9 @@ export function fenToBoard(fen: string): BoardSquare[][] {
   return board
 }
 
-const WHITE_GLYPHS: Record<string, string> = {
-  K: "♔",
-  Q: "♕",
-  R: "♖",
-  B: "♗",
-  N: "♘",
-  P: "♙",
-}
-
-const BLACK_GLYPHS: Record<string, string> = {
+// One filled set for both sides; the component colors them. The
+// outline set read poorly on light squares.
+const GLYPHS: Record<string, string> = {
   K: "♚",
   Q: "♛",
   R: "♜",
@@ -43,6 +36,22 @@ const BLACK_GLYPHS: Record<string, string> = {
 
 export function pieceGlyph(piece: string): { glyph: string; side: "white" | "black" } {
   const side = piece === piece.toUpperCase() ? "white" : "black"
-  const table = side === "white" ? WHITE_GLYPHS : BLACK_GLYPHS
-  return { glyph: table[piece.toUpperCase()] ?? "?", side }
+  return { glyph: GLYPHS[piece.toUpperCase()] ?? "?", side }
 }
+
+// Squares whose contents differ between two positions: the last move's
+// from/to (four squares for castling, three for en passant). SAN alone
+// does not name the from-square, so diffing FENs is the cheap route.
+export function changedSquares(before: string, after: string): Set<string> {
+  const a = fenToBoard(before)
+  const b = fenToBoard(after)
+  const out = new Set<string>()
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      if (a[r]?.[f] !== b[r]?.[f]) out.add(`${"abcdefgh"[f]}${8 - r}`)
+    }
+  }
+  return out
+}
+
+export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"

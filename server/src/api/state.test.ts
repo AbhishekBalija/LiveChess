@@ -58,7 +58,14 @@ describe("getGameState cache fast path", () => {
       { ply: 2, san: "e5", fen: "fen-2", version: 2 },
     ];
     const db: StateDbPort = {
-      findGame: async () => ({ id: GID, version: 2, currentFen: "fen-2", lastPly: 2 }),
+      findGame: async () => ({
+        id: GID,
+        version: 2,
+        currentFen: "fen-2",
+        lastPly: 2,
+        white: "Carlsen, Magnus",
+        black: "Nepomniachtchi, Ian",
+      }),
       findLiveMove: async () => ({ ply: 2, san: "e5" }),
       listLiveMovesSince: async (gameId, since) => {
         expect(gameId).toBe(GID);
@@ -69,6 +76,8 @@ describe("getGameState cache fast path", () => {
     const res = await getGameState(db, hitCache, GID, 0);
     expect(res.version).toBe(2);
     expect(res.missedMoves).toEqual(rows);
+    expect(res.white).toBe("Carlsen, Magnus");
+    expect(res.black).toBe("Nepomniachtchi, Ian");
   });
 
   it("goes to Postgres on cache miss", async () => {
