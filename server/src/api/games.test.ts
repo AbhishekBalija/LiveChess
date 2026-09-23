@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clocksFor,
   GamesHttpError,
   LIST_LIMIT,
   listGames,
@@ -16,6 +17,8 @@ const item = (id: string, result = "*"): GameListItem => ({
   tournament: { id: "t1", name: "Olympiad" },
   lastPly: 3,
   lastSan: "Nf3",
+  whiteClock: "0:10:00",
+  blackClock: "0:09:30",
   fen: "fen",
   version: 3,
   updatedAt: "2026-09-23T12:00:00.000Z",
@@ -49,5 +52,16 @@ describe("listGames", () => {
     const res = await listGames(db, "live");
     expect(calls).toEqual([["live", LIST_LIMIT]]);
     expect(res.games.map((g) => g.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("clocksFor", () => {
+  it("puts each clock on the side that made that move", () => {
+    expect(clocksFor(89, "0:38:12", "0:27:13")).toEqual({ whiteClock: "0:38:12", blackClock: "0:27:13" });
+    expect(clocksFor(88, "0:27:13", "0:37:49")).toEqual({ whiteClock: "0:37:49", blackClock: "0:27:13" });
+  });
+
+  it("has no clocks before the first move", () => {
+    expect(clocksFor(0, null, null)).toEqual({ whiteClock: null, blackClock: null });
   });
 });

@@ -8,6 +8,8 @@ export interface LiveMove {
   ply: number
   san: string
   fen: string
+  // Mover's remaining time after this move, when the source has it.
+  clock: string | null
   version: number
 }
 
@@ -18,6 +20,7 @@ export interface GameState {
   moves: Map<number, LiveMove>
   white?: string
   black?: string
+  tournament?: string
 }
 
 // Parsed server push. The gateway sends every value as a string;
@@ -28,6 +31,7 @@ export interface LiveEvent {
   ply: number
   san: string
   fen: string
+  clock: string | null
   version: number
 }
 
@@ -51,6 +55,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     ply,
     san: r["san"],
     fen: r["fen"],
+    clock: typeof r["clock"] === "string" && r["clock"] !== "" ? r["clock"] : null,
     version,
   }
 }
@@ -67,6 +72,7 @@ export function fromSnapshot(res: GameStateResponse): GameState {
     moves,
     white: res.white,
     black: res.black,
+    tournament: res.tournament,
   }
 }
 
@@ -96,6 +102,7 @@ export function applyResync(state: GameState, res: GameStateResponse): GameState
     // Fast-path resyncs omit names; keep the ones we already have.
     white: res.white ?? state.white,
     black: res.black ?? state.black,
+    tournament: res.tournament ?? state.tournament,
   }
 }
 
@@ -117,7 +124,7 @@ export function applyEvent(state: GameState, ev: LiveEvent): EventOutcome {
     return { state: { ...state, version: ev.version, fen: ev.fen, lastPly: ev.ply, moves: kept } }
   }
   const moves = new Map(state.moves)
-  moves.set(ev.ply, { ply: ev.ply, san: ev.san, fen: ev.fen, version: ev.version })
+  moves.set(ev.ply, { ply: ev.ply, san: ev.san, fen: ev.fen, clock: ev.clock, version: ev.version })
   const advanced = ev.ply >= state.lastPly
   return {
     state: {
@@ -128,4 +135,17 @@ export function applyEvent(state: GameState, ev: LiveEvent): EventOutcome {
       moves,
     },
   }
+}
+
+// Each side's clock is on its own latest move: odd plies are White's.
+export function clocksOf(state: GameState): { white: string | null; black: string | null } {
+  let white: string | null = null
+  let black: string | null = null
+  for (let ply = state.lastPly; ply >= 1 && (white === null || black === null); ply--) {
+    const move = state.moves.get(ply)
+    if (!move?.clock) continue
+    if (ply % 2 === 1) white ??= move.clock
+    else black ??= move.clock
+  }
+  return { white, black }
 }

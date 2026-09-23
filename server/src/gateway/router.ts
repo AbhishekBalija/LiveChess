@@ -9,6 +9,7 @@ export interface LiveEvent {
   ply: string;
   san: string;
   fen: string;
+  clock: string;
   version: string;
 }
 

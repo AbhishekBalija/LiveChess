@@ -1,7 +1,7 @@
 import { and, asc, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import { type Db } from "../db/client";
-import { games, moves } from "../db/schema";
+import { games, moves, tournaments } from "../db/schema";
 import { cacheKey } from "../publisher/publisher";
 
 // Read-only resync. The publisher owns all Redis writes (ADR 0003);
@@ -16,12 +16,15 @@ export interface GameCheckpoint {
   lastPly: number;
   white?: string;
   black?: string;
+  tournament?: string;
 }
 
 export interface LiveMoveRow {
   ply: number;
   san: string;
   fen: string;
+  // Mover's remaining time after this move (PGN %clk), when the source has it.
+  clock: string | null;
   version: number;
 }
 
@@ -53,6 +56,7 @@ export interface GameStateResponse {
   // (since_version=0) always misses the fast path, so clients get names.
   white?: string;
   black?: string;
+  tournament?: string;
 }
 
 export class StateHttpError extends Error {
@@ -90,8 +94,10 @@ export function drizzleStateDb(database: Db): StateDbPort {
           lastPly: games.lastPly,
           white: games.white,
           black: games.black,
+          tournament: tournaments.name,
         })
         .from(games)
+        .innerJoin(tournaments, eq(tournaments.id, games.tournamentId))
         .where(eq(games.id, gameId));
       return row ?? null;
     },
@@ -106,7 +112,7 @@ export function drizzleStateDb(database: Db): StateDbPort {
     },
     async listLiveMovesSince(gameId, sinceVersion) {
       return database
-        .select({ ply: moves.ply, san: moves.san, fen: moves.fen, version: moves.version })
+        .select({ ply: moves.ply, san: moves.san, fen: moves.fen, clock: moves.clock, version: moves.version })
         .from(moves)
         .where(
           and(
@@ -183,5 +189,6 @@ export async function getGameState(
     missedMoves,
     white: game.white,
     black: game.black,
+    tournament: game.tournament,
   };
 }

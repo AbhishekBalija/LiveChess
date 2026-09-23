@@ -2,49 +2,50 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Matchday design system (issue #19). Dark only: navy grounds, one lime
+ * accent for "live and yours to act on", red for LIVE, gold for game
+ * status, green for results. Shadcn's token names are kept so its
+ * components pick these up.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-}
+  --radius: 1rem;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #0a0f1e;
+  --foreground: #eef2ff;
+  --card: #121a2e;
+  --card-foreground: #eef2ff;
+  --primary: #c8f560;
+  --primary-foreground: #0a0f1e;
+  --secondary: #1f2a44;
+  --secondary-foreground: #eef2ff;
+  --muted: #1f2a44;
+  --muted-foreground: #9aa6c4;
+  --accent: #1f2a44;
+  --accent-foreground: #eef2ff;
+  --destructive: #ff4d5e;
+  --border: #1f2a44;
+  --input: #3a4a6e;
+  --ring: #c8f560;
+
+  /* Matchday extras */
+  --bar: #0d1426;
+  --line-strong: #3a4a6e;
+  --live: #ff4d5e;
+  --gold: #e8c26a;
+  --win: #5fd08a;
+  --body: #c9d1e4;
 }
 
 @theme inline {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 8px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -61,6 +62,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-bar: var(--bar);
+  --color-line-strong: var(--line-strong);
+  --color-live: var(--live);
+  --color-gold: var(--gold);
+  --color-win: var(--win);
+  --color-body: var(--body);
 }
 
 @layer base {
@@ -68,6 +76,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
   }
 }

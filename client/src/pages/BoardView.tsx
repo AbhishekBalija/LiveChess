@@ -1,56 +1,58 @@
-import { useEffect, useRef, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useParams } from "react-router"
-import { BoardPlaceholder } from "@/components/BoardPlaceholder"
-import { Badge } from "@/components/ui/badge"
+import { ChevronLeft } from "lucide-react"
+import { AppShell } from "@/components/AppShell"
+import { ChessBoard } from "@/components/ChessBoard"
+import { SideDot } from "@/components/MatchCard"
+import { paletteFor } from "@/lib/boardPalette"
 import { changedSquares, START_FEN } from "@/lib/fen"
-import type { GameState, LiveMove } from "@/lib/game"
-import { moveNumber, sideToMove, type Side } from "@/lib/ply"
+import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
+import { splitTournamentName } from "@/lib/names"
+import { formatMove, moveNumber, sideToMove, type Side } from "@/lib/ply"
 import { useLiveGame, type ConnectionStatus } from "@/lib/useLiveGame"
 
-// Live board view. State comes from useLiveGame, which resyncs over HTTP
-// and advances over the gateway WebSocket. The home page stays on mock
-// data (no games-list endpoint exists yet).
-//
-// Layout: board with Black above and White below, capped so board plus
-// both player strips fit the viewport; the move panel sits beside it
-// from md up and stacks under it on phones.
-
-// "Ply 23 · 12. Nf3" for White, "Ply 24 · 12... Nf6" for Black.
-function formatLastMove(ply: number, san: string): string {
-  const n = moveNumber(ply)
-  return sideToMove(ply) === "white" ? `Ply ${ply} · ${n}. ${san}` : `Ply ${ply} · ${n}... ${san}`
-}
-
-// Board column width: full width on phones, and never taller than the
-// viewport minus header and player strips on desktop.
-const BOARD_COLUMN = "w-full max-w-[min(100%,calc(100svh-12rem))]"
+// Live board page (issue #19, Matchday design). Desktop: a scoreboard
+// across the top (White left, status center, Black right, big clocks),
+// then the board with the move list beside it. Phone: back header, the
+// board between both players, moves below. Key moment cards join the
+// side column when commentary lands (Slice 3). State comes from
+// useLiveGame: resync over HTTP, live moves over the WebSocket.
 
 export function BoardView() {
-  const { id } = useParams()
-  const { state, status, notFound } = useLiveGame(id ?? "")
+  const { id = "" } = useParams()
+  const { state, status, notFound } = useLiveGame(id)
+  const updatedAgo = useUpdatedAgo(state?.version)
+  const palette = paletteFor(id)
 
   if (notFound || !id) {
     return (
-      <Shell>
-        <p className="text-sm text-muted-foreground">Game not found.</p>
-      </Shell>
+      <AppShell>
+        <div className="flex flex-col items-start gap-3 px-4 py-10 md:px-12">
+          <p className="text-muted-foreground">Game not found.</p>
+          <Link to="/" className="font-semibold">Back to live games</Link>
+        </div>
+      </AppShell>
     )
   }
 
+  const tournament = state?.tournament ? splitTournamentName(state.tournament) : null
+  const eventLine = tournament ? [tournament.title, tournament.subtitle].filter(Boolean).join(" · ") : "Live game"
+
   if (state === null) {
     return (
-      <Shell>
-        <div className={`${BOARD_COLUMN} flex flex-col gap-3`}>
-          <BoardPlaceholder />
-          <p className="text-sm text-muted-foreground">
+      <AppShell phoneChrome={false}>
+        <PhoneHeader eventLine={eventLine} status={status} />
+        <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3 px-4 py-6">
+          <ChessBoard palette={palette} />
+          <p role="status" className="text-sm text-muted-foreground">
             {status === "error"
               ? "Could not load this game."
               : status === "reconnecting"
                 ? "Can't reach server, retrying..."
-                : "Loading board…"}
+                : "Loading board..."}
           </p>
         </div>
-      </Shell>
+      </AppShell>
     )
   }
 
@@ -58,129 +60,151 @@ export function BoardView() {
   const lastMove = state.moves.get(state.lastPly) ?? null
   const prevFen = state.lastPly > 1 ? state.moves.get(state.lastPly - 1)?.fen : START_FEN
   const highlight = lastMove && prevFen ? changedSquares(prevFen, state.fen) : undefined
+  const clocks = clocksOf(state)
+  const white = state.white ?? "White"
+  const black = state.black ?? "Black"
+  const statusText = lastMove
+    ? `${toMove === "white" ? "White" : "Black"} to move after ${formatMove(lastMove.ply, lastMove.san)}`
+    : "Waiting for the first move"
 
   return (
-    <Shell
-      title={
-        state.white && state.black ? (
-          <>
-            {state.white} <span className="font-normal text-muted-foreground">vs</span> {state.black}
-          </>
-        ) : (
-          "Live game"
-        )
-      }
-      aside={
-        <div className="flex items-center gap-2">
-          <ConnectionDot status={status} />
-          <Badge variant="secondary" className="font-mono tabular-nums">
-            v{state.version}
-          </Badge>
+    <AppShell phoneChrome={false}>
+      <PhoneHeader eventLine={eventLine} status={status} />
+
+      {/* Desktop: breadcrumb plus scoreboard */}
+      <div className="hidden md:block">
+        <div className="px-8 pt-5 text-[15px] text-muted-foreground lg:px-12">
+          <Link to="/" className="text-muted-foreground hover:text-foreground">Live</Link>
+          {" · "}
+          {eventLine}
         </div>
-      }
-    >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start">
-        <div className={`${BOARD_COLUMN} flex flex-col gap-2`}>
-          <PlayerStrip side="black" name={state.black} active={toMove === "black"} />
-          <BoardPlaceholder fen={state.fen} highlight={highlight} />
-          <PlayerStrip side="white" name={state.white} active={toMove === "white"} />
-        </div>
-        <MovePanel state={state} lastMove={lastMove} />
+        <section
+          aria-label="Scoreboard"
+          className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 border-b border-border px-8 pt-7 pb-8 lg:px-12"
+        >
+          <ScoreSide side="white" name={white} clock={clocks.white} active={toMove === "white"} />
+          <div className="flex flex-col items-center gap-2 text-center">
+            <LiveBadge status={status} updatedAgo={updatedAgo} />
+            <span className="text-xl font-bold text-gold lg:text-[26px]">{statusText}</span>
+          </div>
+          <ScoreSide side="black" name={black} clock={clocks.black} active={toMove === "black"} align="right" />
+        </section>
       </div>
-    </Shell>
+
+      <main className="mx-auto grid w-full max-w-[1440px] gap-6 pb-8 md:grid-cols-[minmax(0,640px)_minmax(0,1fr)] md:gap-10 md:px-8 md:pt-7 lg:px-12">
+        <div className="flex flex-col">
+          <PhonePlayer side="black" name={black} clock={clocks.black} active={toMove === "black"} />
+          {/* Desktop: never taller than the screen under the scoreboard. */}
+          <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
+            <ChessBoard fen={state.fen} highlight={highlight} palette={palette} />
+          </div>
+          <PhonePlayer side="white" name={white} clock={clocks.white} active={toMove === "white"} />
+          <p className="px-5 pt-1 text-sm font-bold text-gold md:hidden">{statusText}</p>
+        </div>
+
+        <section aria-labelledby="moves-heading" className="flex min-w-0 flex-col gap-4 px-4 md:px-0">
+          <h2 id="moves-heading" className="text-lg font-bold md:text-xl">Moves</h2>
+          <MoveList moves={state.moves} lastPly={state.lastPly} />
+        </section>
+      </main>
+    </AppShell>
   )
 }
 
-function Shell({
-  title,
-  aside,
-  children,
-}: {
-  title?: ReactNode
-  aside?: ReactNode
-  children: ReactNode
-}) {
+// "Updated 5s ago" since the last change we received (stale-feed hint):
+// the Live dot alone cannot tell a quiet position from a stalled feed.
+function useUpdatedAgo(version: number | undefined): string | null {
+  const [lastChange, setLastChange] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (version !== undefined) setLastChange(Date.now())
+  }, [version])
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(timer)
+  }, [])
+  if (lastChange === null) return null
+  const seconds = Math.max(0, Math.round((now - lastChange) / 1000))
+  if (seconds < 10) return "just now"
+  if (seconds < 60) return `${seconds}s ago`
+  return `${Math.round(seconds / 60)}m ago`
+}
+
+function LiveBadge({ status, updatedAgo }: { status: ConnectionStatus; updatedAgo?: string | null }) {
+  const live = status === "live"
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
-      <nav>
-        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← All games
-        </Link>
-      </nav>
-      {title && (
-        <header className="flex items-center justify-between gap-3">
-          <h1 className="min-w-0 truncate text-lg font-semibold">{title}</h1>
-          {aside}
-        </header>
-      )}
-      {children}
-    </main>
+    <span role="status" className="flex items-center gap-1.5 text-[13px] font-bold">
+      <span aria-hidden className={`size-2 rounded-full ${live ? "bg-live" : "animate-pulse bg-gold"}`} />
+      {live ? "Live" : status === "loading" ? "Connecting..." : "Reconnecting..."}
+      {live && updatedAgo && <span className="font-medium text-muted-foreground">· updated {updatedAgo}</span>}
+    </span>
   )
 }
 
-function PlayerStrip({ side, name, active }: { side: Side; name?: string; active: boolean }) {
+function PhoneHeader({ eventLine, status }: { eventLine: string; status: ConnectionStatus }) {
   return (
-    <div className="flex h-8 items-center justify-between gap-2 px-0.5 text-sm">
-      <span className="flex min-w-0 items-center gap-2">
-        <span
-          aria-hidden
-          className={`size-3 shrink-0 rounded-full ring-1 ring-white/30 ${
-            side === "white" ? "bg-white" : "bg-stone-900"
-          }`}
-        />
-        <span className="truncate font-medium">{name ?? (side === "white" ? "White" : "Black")}</span>
+    <header className="flex items-center gap-1 px-3 pt-2.5 pb-3.5 md:hidden">
+      <Link to="/" aria-label="Back to live games" className="flex size-11 items-center justify-center text-foreground">
+        <ChevronLeft className="size-5" aria-hidden />
+      </Link>
+      <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{eventLine}</span>
+      <span className="pr-2">
+        <LiveBadge status={status} />
       </span>
-      {active && (
-        <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
-          to move
+    </header>
+  )
+}
+
+function ScoreSide({
+  side,
+  name,
+  clock,
+  active,
+  align = "left",
+}: {
+  side: Side
+  name: string
+  clock: string | null
+  active: boolean
+  align?: "left" | "right"
+}) {
+  const right = align === "right"
+  return (
+    <div className={`flex min-w-0 flex-col gap-1 ${right ? "items-end text-right" : "items-start"}`}>
+      <span className={`flex min-w-0 items-center gap-2.5 text-lg font-bold lg:text-xl ${right ? "flex-row-reverse" : ""}`}>
+        <SideDot side={side} className="size-3.5" />
+        <span className="truncate">{name}</span>
+      </span>
+      <span
+        className={`font-display text-[44px] leading-none font-bold tabular-nums lg:text-[52px] ${
+          active ? "text-primary" : "text-foreground"
+        }`}
+      >
+        {clock ?? "--:--"}
+      </span>
+    </div>
+  )
+}
+
+function PhonePlayer({ side, name, clock, active }: { side: Side; name: string; clock: string | null; active: boolean }) {
+  return (
+    <div className="flex h-11 items-center justify-between px-5 md:hidden">
+      <span className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold">
+        <SideDot side={side} className="size-2.5" />
+        <span className="truncate">{name}</span>
+      </span>
+      {clock && (
+        <span className={`font-display text-2xl font-bold tabular-nums ${active ? "text-primary" : "text-muted-foreground"}`}>
+          {clock}
         </span>
       )}
     </div>
   )
 }
 
-function ConnectionDot({ status }: { status: ConnectionStatus }) {
-  const live = status === "live"
-  return (
-    <span
-      className="flex items-center gap-1.5 text-xs text-muted-foreground"
-      role="status"
-      aria-label={live ? "Live" : "Reconnecting"}
-    >
-      <span
-        aria-hidden
-        className={`size-2 rounded-full ${live ? "bg-green-500" : "animate-pulse bg-amber-500"}`}
-      />
-      {live ? "Live" : status === "loading" ? "Connecting…" : "Reconnecting…"}
-    </span>
-  )
-}
-
-function MovePanel({ state, lastMove }: { state: GameState; lastMove: LiveMove | null }) {
-  return (
-    <section
-      aria-label="Game moves"
-      className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card md:max-h-[calc(100svh-12rem)] md:self-stretch"
-    >
-      <div className="border-b border-border px-3 py-2.5 text-sm">
-        <span aria-label="Last move" className="font-medium tabular-nums">
-          {lastMove ? formatLastMove(lastMove.ply, lastMove.san) : "No moves yet"}
-        </span>
-      </div>
-      <MoveList moves={state.moves} lastPly={state.lastPly} />
-      <p
-        className="truncate border-t border-border px-3 py-2 font-mono text-[11px] text-muted-foreground select-all"
-        title={state.fen}
-      >
-        {state.fen}
-      </p>
-    </section>
-  )
-}
-
-// Grouped notation, one row per move number: "12. Nf3 Nf6".
-// Auto-scrolls its own container (not the page) to the newest row.
-function MoveList({ moves, lastPly }: { moves: Map<number, LiveMove>; lastPly: number }) {
+// Grouped notation, one row per move number: "12. Nf3 Nf6". Scrolls its
+// own box (not the page) to the newest row.
+function MoveList({ moves, lastPly }: { moves: GameState["moves"]; lastPly: number }) {
   const scroller = useRef<HTMLOListElement>(null)
   const plies = [...moves.keys()].sort((a, b) => a - b)
   const last = plies[plies.length - 1] ?? 0
@@ -191,7 +215,7 @@ function MoveList({ moves, lastPly }: { moves: Map<number, LiveMove>; lastPly: n
   }, [last])
 
   if (plies.length === 0) {
-    return <p className="flex-1 px-3 py-4 text-sm text-muted-foreground">Waiting for the first move…</p>
+    return <p className="rounded-lg bg-card px-4 py-6 text-sm text-muted-foreground">Waiting for the first move...</p>
   }
 
   const rows: Array<{ n: number; white?: LiveMove; black?: LiveMove }> = []
@@ -205,10 +229,10 @@ function MoveList({ moves, lastPly }: { moves: Map<number, LiveMove>; lastPly: n
     <ol
       ref={scroller}
       aria-label="Moves"
-      className="max-h-64 flex-1 overflow-y-auto py-1 text-sm tabular-nums md:max-h-none"
+      className="max-h-80 overflow-y-auto rounded-lg bg-card py-2 font-mono text-[15px] md:max-h-[560px]"
     >
       {rows.map((row) => (
-        <li key={row.n} className="grid grid-cols-[2.5rem_1fr_1fr] items-center px-1 even:bg-white/[0.03]">
+        <li key={row.n} className="grid grid-cols-[3.25rem_1fr_1fr] items-center px-2 odd:bg-white/[0.02]">
           <span className="pl-2 text-muted-foreground">{row.n}.</span>
           <MoveCell move={row.white} current={row.white?.ply === lastPly} />
           <MoveCell move={row.black} current={row.black?.ply === lastPly} />
@@ -223,9 +247,7 @@ function MoveCell({ move, current }: { move?: LiveMove; current: boolean }) {
   return (
     <span
       aria-current={current ? "step" : undefined}
-      className={`mx-0.5 my-0.5 rounded px-2 py-1 font-medium ${
-        current ? "bg-primary text-primary-foreground" : ""
-      }`}
+      className={`mx-0.5 my-1 w-fit rounded-md px-2.5 py-1 ${current ? "bg-primary font-bold text-primary-foreground" : ""}`}
     >
       {move.san}
     </span>

@@ -80,6 +80,7 @@ export function applyMoveReceived(
           oldSan: existing.san,
           newSan: input.san,
           fen: input.fen,
+          clock: input.clock,
           version,
         },
       },

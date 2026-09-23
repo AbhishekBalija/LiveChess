@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { GameStateResponse } from "@/types"
 import {
   applyEvent,
+  clocksOf,
   applyResync,
   fromSnapshot,
   parseLiveEvent,
@@ -18,22 +19,22 @@ function snapshot(overrides: Partial<GameStateResponse> = {}): GameStateResponse
     fen: "fen-2",
     lastMove: { ply: 2, san: "e5" },
     missedMoves: [
-      { ply: 1, san: "e4", fen: "fen-1", version: 1 },
-      { ply: 2, san: "e5", fen: "fen-2", version: 2 },
+      { ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 },
+      { ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 },
     ],
     ...overrides,
   }
 }
 
 function event(overrides: Partial<LiveEvent> = {}): LiveEvent {
-  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", version: 1, ...overrides }
+  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, ...overrides }
 }
 
 describe("parseLiveEvent", () => {
   it("parses string ply/version to numbers", () => {
     expect(
-      parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", version: "3" }),
-    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", version: 3 })
+      parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", clock: "1:29:10", version: "3" }),
+    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3 })
   })
 
   it("rejects other games, non-integers, and missing fields", () => {
@@ -73,7 +74,7 @@ describe("applyResync", () => {
         version: 3,
         fen: "fen-2",
         lastMove: { ply: 2, san: "e5" },
-        missedMoves: [{ ply: 1, san: "d4", fen: "fen-1b", version: 3 }],
+        missedMoves: [{ ply: 1, san: "d4", fen: "fen-1b", clock: null, version: 3 }],
       }),
     )
     expect(next.version).toBe(3)
@@ -85,7 +86,7 @@ describe("applyResync", () => {
     const state = fromSnapshot(snapshot())
     const next = applyResync(
       state,
-      snapshot({ missedMoves: [{ ply: 1, san: "a3", fen: "fen-x", version: 1 }] }),
+      snapshot({ missedMoves: [{ ply: 1, san: "a3", fen: "fen-x", clock: null, version: 1 }] }),
     )
     expect(next.moves.get(1)?.san).toBe("e4")
   })
@@ -98,7 +99,7 @@ describe("applyResync", () => {
         version: 1,
         fen: "fen-older",
         lastMove: { ply: 1, san: "e4" },
-        missedMoves: [{ ply: 1, san: "a3", fen: "fen-x", version: 1 }],
+        missedMoves: [{ ply: 1, san: "a3", fen: "fen-x", clock: null, version: 1 }],
       }),
     )
     expect(next).toBe(state)
@@ -112,7 +113,7 @@ describe("applyEvent", () => {
 
   it("keeps White and Black at the same move number as distinct plies", () => {
     let state: GameState = { version: 0, fen: "", lastPly: 0, moves: new Map() }
-    for (const ev of [event({ ply: 1, san: "e4", fen: "fen-1", version: 1 }), event({ ply: 2, san: "e5", fen: "fen-2", version: 2 })]) {
+    for (const ev of [event({ ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 }), event({ ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 })]) {
       const out = applyEvent(state, ev)
       if (!("state" in out)) throw new Error("unexpected gap")
       state = out.state
@@ -146,7 +147,7 @@ describe("applyEvent", () => {
   })
 
   it("advances the board when the ply reaches past lastPly", () => {
-    const out = applyEvent(twoPlyState(), event({ ply: 3, san: "Bb5", fen: "fen-3", version: 3 }))
+    const out = applyEvent(twoPlyState(), event({ ply: 3, san: "Bb5", fen: "fen-3", clock: null, version: 3 }))
     if (!("state" in out)) throw new Error("unexpected gap")
     expect(out.state.fen).toBe("fen-3")
     expect(out.state.lastPly).toBe(3)
@@ -154,14 +155,14 @@ describe("applyEvent", () => {
 
   it("ignores duplicates, returning the same reference", () => {
     const state = twoPlyState()
-    const out = applyEvent(state, event({ ply: 2, san: "e5", fen: "fen-2", version: 2 }))
+    const out = applyEvent(state, event({ ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 }))
     if (!("state" in out)) throw new Error("unexpected gap")
     expect(out.state).toBe(state)
   })
 
   it("requests resync on a gap without touching state", () => {
     const state = twoPlyState()
-    const out = applyEvent(state, event({ ply: 5, san: "x", fen: "fen-5", version: 5 }))
+    const out = applyEvent(state, event({ ply: 5, san: "x", fen: "fen-5", clock: null, version: 5 }))
     expect(out).toEqual({ resync: true })
     expect(state.version).toBe(2)
     expect(state.moves.size).toBe(2)
@@ -176,10 +177,10 @@ describe("takebacks (ADR 0004)", () => {
         fen: "fen-4",
         lastMove: { ply: 4, san: "Nc6" },
         missedMoves: [
-          { ply: 1, san: "e4", fen: "fen-1", version: 1 },
-          { ply: 2, san: "e5", fen: "fen-2", version: 2 },
-          { ply: 3, san: "Nf3", fen: "fen-3", version: 3 },
-          { ply: 4, san: "Nc6", fen: "fen-4", version: 4 },
+          { ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 },
+          { ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 },
+          { ply: 3, san: "Nf3", fen: "fen-3", clock: null, version: 3 },
+          { ply: 4, san: "Nc6", fen: "fen-4", clock: null, version: 4 },
         ],
       }),
     )
@@ -209,10 +210,31 @@ describe("takebacks (ADR 0004)", () => {
   it("resync trims plies a missed takeback removed", () => {
     const next = applyResync(
       four(),
-      snapshot({ version: 6, fen: "fen-2b", lastMove: { ply: 2, san: "c5" }, missedMoves: [{ ply: 2, san: "c5", fen: "fen-2b", version: 6 }] }),
+      snapshot({ version: 6, fen: "fen-2b", lastMove: { ply: 2, san: "c5" }, missedMoves: [{ ply: 2, san: "c5", fen: "fen-2b", clock: null, version: 6 }] }),
     )
     expect([...next.moves.keys()].sort()).toEqual([1, 2])
     expect(next.moves.get(2)?.san).toBe("c5")
     expect(next).toMatchObject({ lastPly: 2, version: 6 })
+  })
+})
+
+describe("clocksOf", () => {
+  it("reads each side's clock from its own latest move", () => {
+    const state = fromSnapshot({
+      gameId: GID,
+      version: 3,
+      fen: "fen-3",
+      lastMove: { ply: 3, san: "Nf3" },
+      missedMoves: [
+        { ply: 1, san: "e4", fen: "fen-1", clock: "1:30:00", version: 1 },
+        { ply: 2, san: "e5", fen: "fen-2", clock: "1:29:40", version: 2 },
+        { ply: 3, san: "Nf3", fen: "fen-3", clock: "1:29:10", version: 3 },
+      ],
+    })
+    expect(clocksOf(state)).toEqual({ white: "1:29:10", black: "1:29:40" })
+  })
+
+  it("has no clocks when the source sends none", () => {
+    expect(clocksOf(fromSnapshot(snapshot()))).toEqual({ white: null, black: null })
   })
 })

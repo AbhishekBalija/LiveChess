@@ -1,4 +1,5 @@
 import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { type Db } from "../db/client";
 import { games, moves, tournaments } from "../db/schema";
@@ -17,6 +18,9 @@ export interface GameListItem {
   tournament: { id: string; name: string };
   lastPly: number;
   lastSan: string | null;
+  // Remaining time from the PGN %clk of each side's latest move.
+  whiteClock: string | null;
+  blackClock: string | null;
   fen: string;
   version: number;
   updatedAt: string;
@@ -55,9 +59,24 @@ export async function listGames(
   return { games: await database.listGames(status, LIST_LIMIT) };
 }
 
-// One query: game plus its tournament plus the live move at last_ply
-// (left join, so a game with no moves yet still shows up).
+// Each side's clock is on its own latest move: the move at last_ply is
+// by the side that just moved (odd ply = White), the one before it by
+// the other side.
+export function clocksFor(
+  lastPly: number,
+  lastClock: string | null,
+  prevClock: string | null,
+): { whiteClock: string | null; blackClock: string | null } {
+  if (lastPly === 0) return { whiteClock: null, blackClock: null };
+  return lastPly % 2 === 1
+    ? { whiteClock: lastClock, blackClock: prevClock }
+    : { whiteClock: prevClock, blackClock: lastClock };
+}
+
+// One query: game plus its tournament plus the live moves at last_ply and
+// the ply before (left joins, so a game with no moves yet still shows up).
 export function drizzleGamesDb(database: Db): GamesDbPort {
+  const prev = alias(moves, "prev");
   return {
     async listGames(status, limit) {
       const filter =
@@ -76,6 +95,8 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
           tournamentName: tournaments.name,
           lastPly: games.lastPly,
           lastSan: moves.san,
+          lastClock: moves.clock,
+          prevClock: prev.clock,
           fen: games.currentFen,
           version: games.version,
           updatedAt: games.updatedAt,
@@ -90,6 +111,14 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
             eq(moves.superseded, false),
           ),
         )
+        .leftJoin(
+          prev,
+          and(
+            eq(prev.gameId, games.id),
+            eq(prev.ply, sql`${games.lastPly} - 1`),
+            eq(prev.superseded, false),
+          ),
+        )
         .where(filter)
         .orderBy(desc(games.updatedAt))
         .limit(limit);
@@ -101,6 +130,7 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         tournament: { id: r.tournamentId, name: r.tournamentName },
         lastPly: r.lastPly,
         lastSan: r.lastSan,
+        ...clocksFor(r.lastPly, r.lastClock, r.prevClock),
         fen: r.fen,
         version: r.version,
         updatedAt: r.updatedAt.toISOString(),

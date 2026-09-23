@@ -12,7 +12,7 @@ describe("gateway router", () => {
     router.subscribe(b, "g-2");
     const send = vi.fn();
     const delivered = router.fanout(
-      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", version: "1" },
+      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", clock: "", version: "1" },
       send,
     );
     expect(delivered).toBe(1);
@@ -25,7 +25,7 @@ describe("gateway router", () => {
     const a = {};
     router.subscribe(a, "g-1");
     router.fanout(
-      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", version: "1" },
+      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", clock: "", version: "1" },
       () => {},
     );
     // A late subscriber gets nothing from memory; it must resync.
@@ -33,7 +33,7 @@ describe("gateway router", () => {
     router.subscribe(late, "g-1");
     const send = vi.fn();
     expect(router.fanout(
-      { type: "MoveReceived", gameId: "g-9", ply: "9", san: "x", fen: "f", version: "9" },
+      { type: "MoveReceived", gameId: "g-9", ply: "9", san: "x", fen: "f", clock: "", version: "9" },
       send,
     )).toBe(0);
     expect(send).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe("gateway router", () => {
     router.unsubscribeAll(a);
     const send = vi.fn();
     router.fanout(
-      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", version: "1" },
+      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", clock: "", version: "1" },
       send,
     );
     expect(send).not.toHaveBeenCalled();
@@ -68,8 +68,8 @@ describe("gateway consumer", () => {
           seen.push([group, stream, GROUP]);
           expect(stream).toBe(STREAM);
           return [
-            { id: "1-0", fields: { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", version: "1" } },
-            { id: "2-0", fields: { type: "MoveReceived", gameId: "g-2", ply: "1", san: "d4", fen: "f", version: "1" } },
+            { id: "1-0", fields: { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", clock: "", version: "1" } },
+            { id: "2-0", fields: { type: "MoveReceived", gameId: "g-2", ply: "1", san: "d4", fen: "f", clock: "", version: "1" } },
           ];
         },
         ack: async (_s, _g, id) => {

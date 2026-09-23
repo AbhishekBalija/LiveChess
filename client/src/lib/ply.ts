@@ -13,3 +13,9 @@ export function moveNumber(ply: number): number {
 export function sideToMove(ply: number): Side {
   return ply % 2 === 1 ? "white" : "black"
 }
+
+/** "24. Rg4" for White's move, "24... Bd3" for Black's. */
+export function formatMove(ply: number, san: string): string {
+  const n = moveNumber(ply)
+  return sideToMove(ply) === "white" ? `${n}. ${san}` : `${n}... ${san}`
+}

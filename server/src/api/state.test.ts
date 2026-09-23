@@ -54,8 +54,8 @@ describe("getGameState cache fast path", () => {
 
   it("goes to Postgres when the client is behind the cache", async () => {
     const rows: LiveMoveRow[] = [
-      { ply: 1, san: "e4", fen: "fen-1", version: 1 },
-      { ply: 2, san: "e5", fen: "fen-2", version: 2 },
+      { ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 },
+      { ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 },
     ];
     const db: StateDbPort = {
       findGame: async () => ({
@@ -84,7 +84,7 @@ describe("getGameState cache fast path", () => {
     const db: StateDbPort = {
       findGame: async () => ({ id: GID, version: 1, currentFen: "fen-1", lastPly: 1 }),
       findLiveMove: async () => ({ ply: 1, san: "e4" }),
-      listLiveMovesSince: async () => [{ ply: 1, san: "e4", fen: "fen-1", version: 1 }],
+      listLiveMovesSince: async () => [{ ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 }],
     };
     const res = await getGameState(db, missCache, GID);
     expect(res.missedMoves).toHaveLength(1);
@@ -192,8 +192,8 @@ describe("getGameState validation", () => {
       findGame: async () => ({ id: GID, version: 3, currentFen: "fen-2", lastPly: 2 }),
       findLiveMove: async () => ({ ply: 2, san: "e5" }),
       listLiveMovesSince: async () => [
-        { ply: 2, san: "e5", fen: "fen-2", version: 2 },
-        { ply: 1, san: "d4", fen: "fen-1b", version: 3 },
+        { ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 },
+        { ply: 1, san: "d4", fen: "fen-1b", clock: null, version: 3 },
       ],
     };
     const res = await getGameState(db, missCache, GID, 0);
