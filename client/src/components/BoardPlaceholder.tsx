@@ -4,7 +4,8 @@ import { fenToBoard, pieceGlyph } from "@/lib/fen"
 // with one it draws each square's piece as a Unicode glyph.
 // (A real chess library arrives only if the shell outgrows glyphs.)
 // Glyphs size off the board width (container query units), so the same
-// markup reads on a phone and on a capped desktop board.
+// markup reads on a phone and on a capped desktop board. Rows are fixed
+// at 8 equal tracks: auto rows let empty ranks collapse in endgames.
 
 const FILES = "abcdefgh"
 
@@ -23,7 +24,7 @@ export function BoardPlaceholder({
     <div
       role="img"
       aria-label={fen ? "Live chess board" : "Chess board placeholder"}
-      className="@container grid aspect-square w-full grid-cols-8 overflow-hidden rounded-md shadow-lg shadow-black/40 ring-1 ring-white/10"
+      className="@container grid aspect-square w-full grid-cols-8 grid-rows-8 overflow-hidden rounded-md shadow-lg shadow-black/40 ring-1 ring-white/10"
     >
       {Array.from({ length: 64 }, (_, i) => {
         const row = Math.floor(i / 8)
@@ -35,7 +36,7 @@ export function BoardPlaceholder({
         return (
           <div
             key={square}
-            className={`relative flex items-center justify-center ${
+            className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden ${
               light ? "bg-[#ebd7b5]" : "bg-[#b0896a]"
             }`}
           >
