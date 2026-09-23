@@ -20,7 +20,7 @@ One ply played in a game, stored with SAN and FEN and never deleted.
 _Avoid_: half-move record
 
 **Clock**:
-Remaining time for the side to move at a ply, parsed from Lichess `%clk`. Carried on the games list, resync and live move events; the client ticks the side to move's clock forward from the last move's time.
+Time a player has left, as recorded on the ply they just made. Between plies, only the side to move's Clock runs.
 
 **Version**:
 Monotonic counter per game bumped on every new ply and every correction, the single ordering authority for jobs and resync.
@@ -44,17 +44,17 @@ A collection of games from one source event, identified by internal UUID mapped 
 _Avoid_: Broadcast (Lichess's name for the same event)
 
 **Round**:
-A stage of a Tournament on Lichess (e.g. "Round 5"), identified by its Lichess round id. The unit the Supervisor discovers, follows and stops on its own; games store it as `round_source_id`.
+One scheduled set of Games within a Tournament (e.g. "Round 5"), played at the same time. The unit the Supervisor follows.
 
 **Result**:
 The PGN score of a Game: `1-0`, `0-1`, `1/2-1/2`, or `*` while still in progress.
 
 **Live game**:
-A Game whose Result is still `*` and that had a move or correction in the last three hours. `GET /games?status=live` returns these; `status=finished` returns every Game with a Result other than `*`.
+A Game whose Result is still `*` and that had a move or Correction in the last three hours. A Game with any other Result is finished.
 _Avoid_: in-progress game, ongoing game
 
 **Upcoming round**:
-A Round that has not started yet, starting within the next week, from Lichess's broadcast list (`GET /upcoming`, cached 5 minutes). Shown on the home page as "Starting soon".
+A Round scheduled to start within the next week that has not started yet. Shown to fans as "Starting soon".
 
 ## Ingestion
 
@@ -62,8 +62,8 @@ A Round that has not started yet, starting within the next week, from Lichess's 
 External origin of chess data, with source_id the external identifier resolved to an internal UUID.
 
 **Supervisor**:
-The process that follows live Lichess Rounds on its own instead of being pointed at one by hand: it discovers ongoing Rounds, streams as many as the stream limit allows and polls the rest, and stops a Round two misses after it leaves the live list.
-_Avoid_: worker (the per-Round streaming or polling loop that the Supervisor and the standalone `ingest` command both run)
+The part of LiveChess that decides which live Rounds to follow, starts following them when they go live, and stops once a Round is no longer live, giving it a Final pull.
+_Avoid_: worker (that is the loop following a single Round)
 
 **Final pull**:
-The one PGN export request a Round gets when the Supervisor stops following it, or on startup for a Round left with an unfinished Game, so its last result is captured even though nothing streams or polls it anymore.
+One last complete read of a Round when LiveChess stops following it, so every Result is captured even after nothing is watching the Round anymore.

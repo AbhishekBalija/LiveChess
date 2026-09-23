@@ -75,10 +75,11 @@ Nothing new for fans; make what exists trustworthy and public.
 
 - [x] Clocks: show remaining time per side, ticking locally for the side
       to move (delivered early with the Slice 1.5 design foundation, #19)
-- [x] Results and finished games: result line, home Finished tab, board
-      game-over state (delivered early alongside clocks, #19)
-- Eval: Stockfish job per new Version via BullMQ, eval stored per ply and
-  pushed through the outbox like moves
+- Results and finished games: result line on cards and the home Finished
+  tab are done (#19); the board page game-over state (result badge,
+  winner, clocks stopped) is not yet built
+- Eval: approach decided in an ADR first (Lichess cloud eval, Stockfish in
+  the viewer's browser, and/or a server worker), eval pushed live like moves
 - Win-probability bar from eval
 - Multi-board grid: watch a whole round at once
 

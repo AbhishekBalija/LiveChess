@@ -13,7 +13,8 @@ stayed unstored.
   round it finds, up to `SUPERVISOR_MAX_ROUNDS` (default 8), in Lichess's
   own priority order.
 - Lichess caps concurrent round streams per IP (2 anonymous, 8 with a
-  `LICHESS_TOKEN`). The Supervisor streams up to that many rounds
+  `LICHESS_TOKEN`; these numbers come from Lichess's server source, the
+  API docs give none). The Supervisor streams up to that many rounds
   (`SUPERVISOR_STREAM_SLOTS`) and polls the rest one request at a time,
   so every followed round still gets moves, just slower once the stream
   slots are full.
