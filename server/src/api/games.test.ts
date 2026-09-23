@@ -23,7 +23,7 @@ const item = (id: string, result = "*"): GameListItem => ({
 
 describe("parseStatus", () => {
   it("defaults to live", () => {
-    expect(parseStatus(null)).toBe("finished");
+    expect(parseStatus(null)).toBe("live");
   });
 
   it("accepts live, finished and all", () => {
