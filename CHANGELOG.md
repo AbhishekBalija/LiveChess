@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `bun run dev [roundId]` at the repo root starts gateway, publisher and
+  client (plus ingestion for a round) with prefixed logs; Ctrl+C stops all.
 - Streaming ingestion: the worker holds the Lichess round stream open
   instead of polling, cutting lag from 20 to 30 seconds on large rounds
   to a few seconds. Reconnects with backoff, stops when the round ends.

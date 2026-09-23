@@ -21,14 +21,24 @@ bun run migrate   # apply drizzle migrations to DATABASE_URL
 bun run seed      # upsert the 3 games shown on the home page
 ```
 
-Then 4 terminals:
+Then one command from the repo root starts the gateway, publisher and
+client together (Ctrl+C stops all of them):
 
-| # | dir      | command                                   |
-|---|----------|-------------------------------------------|
-| 1 | `server` | `bun run gateway`                         |
-| 2 | `server` | `bun run publisher`                       |
-| 3 | `client` | `bun run dev` (serves http://localhost:5173) |
-| 4 | `server` | `bun run sim 123e4567-e89b-12d3-a456-426614174000 [--correct]` |
+```sh
+bun run dev              # gateway + publisher + client (http://localhost:5173)
+bun run dev <roundId>    # ...plus streaming a live Lichess broadcast round
+```
+
+To watch the simulator instead of a real broadcast, run it in a second
+terminal:
+
+```sh
+cd server && bun run sim 123e4567-e89b-12d3-a456-426614174000 [--correct]
+```
+
+Each service can still be started on its own (`bun run gateway`,
+`bun run publisher`, `bun run ingest <roundId>` in `server/`, `bun run dev`
+in `client/`).
 
 Open http://localhost:5173, pick a game, and watch a ply land every 2s.
 `--correct` re-sends ply 4 with a different SAN once after ply 6 to show
