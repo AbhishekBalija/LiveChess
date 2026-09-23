@@ -21,13 +21,20 @@ bun run migrate   # apply drizzle migrations to DATABASE_URL
 bun run seed      # upsert the 3 games shown on the home page
 ```
 
-Then one command from the repo root starts the gateway, publisher and
-client together (Ctrl+C stops all of them):
+Then one command from the repo root starts everything (Ctrl+C stops all of it):
 
 ```sh
-bun run dev              # gateway + publisher + client (http://localhost:5173)
-bun run dev <roundId>    # ...plus streaming a live Lichess broadcast round
+bun run dev              # gateway + publisher + client + supervisor (follows live Lichess broadcasts)
+bun run dev <roundId>    # follow one Lichess broadcast round instead of the supervisor
+bun run dev --no-ingest  # gateway + publisher + client only
 ```
+
+The supervisor reads Lichess's active broadcasts every 5 minutes and
+follows up to 8 ongoing rounds (`SUPERVISOR_MAX_ROUNDS`), streaming 2 of
+them (8 with a `LICHESS_TOKEN`) and polling the rest one request at a time.
+When a round ends or leaves the live list it gets one final pull so every
+result is stored; on startup, rounds left with unfinished games get the
+same pull. Open http://localhost:5173.
 
 To watch the simulator instead of a real broadcast, run it in a second
 terminal:

@@ -23,7 +23,7 @@ import {
 // Handler with Version and existing moves loaded from Postgres, one
 // transaction per game. Restarts are safe and re-polls are no-ops.
 
-const USER_AGENT = "LiveChess/1.0 (broadcast ingestion)";
+export const USER_AGENT = "LiveChess/1.0 (broadcast ingestion)";
 
 export const roundPgnUrl = (roundId: string): string =>
   `https://lichess.org/api/broadcast/round/${roundId}.pgn`;
@@ -143,6 +143,7 @@ export async function upsertGame(
   white: string,
   black: string,
   result = "*",
+  roundSourceId: string | null = null,
 ): Promise<string> {
   const [row] = await database
     .insert(games)
@@ -154,11 +155,12 @@ export async function upsertGame(
       black,
       currentFen: "",
       result,
+      roundSourceId,
     })
     .onConflictDoUpdate({
       target: [games.source, games.sourceId],
       // Result flips from "*" to a score when the game ends.
-      set: { white, black, result },
+      set: { white, black, result, ...(roundSourceId ? { roundSourceId } : {}) },
     })
     .returning({ id: games.id });
   if (!row) throw new Error("game upsert returned no row");
@@ -237,6 +239,8 @@ export async function ingestGame(
 
 export interface PollCounts extends GameCounts {
   games: number;
+  // Every game in the round has a final result.
+  finished: boolean;
 }
 
 // Resolved tournament id, held for one worker run and reused across
@@ -298,6 +302,7 @@ export async function ingestPgnGame(
     game.headers["White"] ?? "?",
     game.headers["Black"] ?? "?",
     result,
+    roundId,
   );
   const counts = await ingestGame(database, gameId, game.plies);
   return { ...counts, sourceId, result };
@@ -310,16 +315,19 @@ export async function ingestRound(
   tourCache: TourCache = { tournamentId: null },
 ): Promise<PollCounts> {
   const pgn = await fetchRoundPgn(http, roundId);
-  const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, truncations: 0, noops: 0 };
+  const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, truncations: 0, noops: 0, finished: false };
+  let allFinal = true;
   for (const part of splitPgnGames(pgn)) {
     const game = await ingestPgnGame(database, http, roundId, part, tourCache);
     if (!game) continue;
     counts.games += 1;
+    if (game.result === "*") allFinal = false;
     counts.inserted += game.inserted;
     counts.corrections += game.corrections;
     counts.truncations += game.truncations;
     counts.noops += game.noops;
   }
+  counts.finished = counts.games > 0 && allFinal;
   return counts;
 }
 
@@ -360,6 +368,9 @@ export interface StreamWorkerOptions {
   idleMs?: number;
   finishCheckMs?: number;
   rateLimitMs?: number;
+  // Stops following the round (the supervisor uses it when a round drops
+  // off Lichess's live list). Resolves instead of reconnecting.
+  signal?: AbortSignal;
 }
 
 // Default ingestion: hold the round stream open, reconnect with backoff,
@@ -369,13 +380,15 @@ export async function runStreamWorker(
   http: HttpPort,
   stream: StreamPort,
   roundId: string,
-  { idleMs = 90_000, finishCheckMs = 60_000, rateLimitMs = 60_000 }: StreamWorkerOptions = {},
+  { idleMs = 90_000, finishCheckMs = 60_000, rateLimitMs = 60_000, signal }: StreamWorkerOptions = {},
 ): Promise<void> {
   const tourCache: TourCache = { tournamentId: null };
   const results = new Map<string, string>();
   let attempt = 0;
-  for (;;) {
+  while (!signal?.aborted) {
     const controller = new AbortController();
+    const stop = () => controller.abort();
+    signal?.addEventListener("abort", stop, { once: true });
     // Checked on a timer, not per game: the dump on connect sends games
     // one by one, and a few finished ones first would look like the end.
     const finishCheck = setInterval(() => {
@@ -406,7 +419,9 @@ export async function runStreamWorker(
       if (!controller.signal.aborted) console.error(`stream ${roundId}: failed, reconnecting`, err);
     } finally {
       clearInterval(finishCheck);
+      signal?.removeEventListener("abort", stop);
     }
+    if (signal?.aborted) return;
     if (roundFinished(results)) {
       console.log(`stream ${roundId}: round finished, stopping`);
       return;
@@ -417,7 +432,7 @@ export async function runStreamWorker(
   }
 }
 
-const nodeHttp: HttpPort = {
+export const nodeHttp: HttpPort = {
   async get(url: string, accept = "application/json"): Promise<HttpResponse> {
     const res = await fetch(url, {
       headers: { "User-Agent": USER_AGENT, Accept: accept },

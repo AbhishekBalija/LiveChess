@@ -1,8 +1,9 @@
-// One command for the whole local stack: gateway, publisher and client,
-// plus the ingestion worker when a Lichess round id is given.
+// One command for the whole local stack: gateway, publisher, client and
+// ingestion.
 //
-//   bun run dev                 # gateway + publisher + client
-//   bun run dev <roundId>       # ...and stream that broadcast round
+//   bun run dev                 # ...plus the supervisor: follows whatever is live on Lichess
+//   bun run dev <roundId>       # ...plus one broadcast round instead
+//   bun run dev --no-ingest     # gateway + publisher + client only
 //
 // Each process's output is prefixed with its name. Ctrl+C stops all of
 // them, and if one crashes the rest are stopped too.
@@ -11,15 +12,17 @@
 // repo lives under "Web Projects"). process.execPath is the running bun.
 const root = `${import.meta.dir}/../`;
 const bun = process.execPath;
-const roundId = process.argv[2];
+const arg = process.argv[2];
 
 const services: Array<{ name: string; color: number; cwd: string; cmd: string[] }> = [
   { name: "gateway", color: 36, cwd: "server", cmd: [bun, "run", "gateway"] },
   { name: "publisher", color: 35, cwd: "server", cmd: [bun, "run", "publisher"] },
   { name: "client", color: 32, cwd: "client", cmd: [bun, "run", "dev"] },
 ];
-if (roundId) {
-  services.push({ name: "ingest", color: 33, cwd: "server", cmd: [bun, "run", "ingest", roundId] });
+if (arg === undefined) {
+  services.push({ name: "supervisor", color: 33, cwd: "server", cmd: [bun, "run", "supervisor"] });
+} else if (arg !== "--no-ingest") {
+  services.push({ name: "ingest", color: 33, cwd: "server", cmd: [bun, "run", "ingest", arg] });
 }
 
 const width = Math.max(...services.map((s) => s.name.length));
