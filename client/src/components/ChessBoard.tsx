@@ -1,6 +1,7 @@
-import type { CSSProperties, ReactNode } from "react"
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { BOARD_PALETTES, type BoardPalette } from "@/lib/boardPalette"
 import { fenToBoard } from "@/lib/fen"
+import { slidesBetween, type Slide } from "@/lib/moveAnimation"
 
 // The chess board. Without a FEN it renders an empty grid (loading);
 // with one it draws the position with the Chessnut SVG pieces. Colors come from the game's palette
@@ -26,6 +27,7 @@ export function ChessBoard({
   className?: string
 }) {
   const board = fen ? fenToBoard(fen) : null
+  const slides = useMoveSlides(fen)
   return (
     <div
       role="img"
@@ -47,7 +49,7 @@ export function ChessBoard({
         return (
           <div
             key={square}
-            className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden"
+            className="relative flex min-h-0 min-w-0 items-center justify-center"
             style={{ background }}
           >
             {coords && fileIndex === 0 && (
@@ -60,7 +62,7 @@ export function ChessBoard({
                 {FILES[fileIndex]}
               </Coord>
             )}
-            {piece && <Piece piece={piece} />}
+            {piece && <Piece piece={piece} slide={slides.get(square)} />}
           </div>
         )
       })}
@@ -89,9 +91,52 @@ const PIECE_URLS = Object.fromEntries(
   ).map(([path, url]) => [path.slice(path.lastIndexOf("/") + 1, -4), url]),
 )
 
-function Piece({ piece }: { piece: string }) {
+// A piece fills its square; while a move animates it starts translated
+// back onto its origin square (in whole squares) and glides home.
+function Piece({ piece, slide }: { piece: string; slide?: SlideState }) {
   const color = piece === piece.toUpperCase() ? "w" : "b"
   const src = PIECE_URLS[`${color}${piece.toUpperCase()}`]
   if (!src) return null
-  return <img src={src} alt="" draggable={false} className="relative size-[90%] select-none" />
+  const style: CSSProperties | undefined = slide
+    ? slide.moving
+      ? { transform: "translate(0, 0)", transition: "transform 200ms ease-out", zIndex: 1 }
+      : { transform: `translate(${slide.dx * 100}%, ${slide.dy * 100}%)`, zIndex: 1 }
+    : undefined
+  return (
+    <span className="absolute inset-0 flex items-center justify-center" style={style}>
+      <img src={src} alt="" draggable={false} className="size-[90%] select-none" />
+    </span>
+  )
+}
+
+interface SlideState extends Slide {
+  moving: boolean
+}
+
+// When the position changes by one move, slide the moved piece(s) from
+// their old square: first paint them at the origin, then on the next
+// frames let the transition carry them to the destination. Skipped for
+// big jumps (see slidesBetween) and for people who ask for less motion.
+function useMoveSlides(fen: string | undefined): Map<string, SlideState> {
+  const previous = useRef(fen)
+  const [slides, setSlides] = useState<Map<string, SlideState>>(new Map())
+  useLayoutEffect(() => {
+    const before = previous.current
+    previous.current = fen
+    if (!before || !fen || before === fen) return
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const found = slidesBetween(before, fen)
+    if (found.size === 0) return
+    const at = (moving: boolean) => new Map([...found].map(([sq, s]) => [sq, { ...s, moving }]))
+    setSlides(at(false))
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setSlides(at(true)))
+    })
+    const done = setTimeout(() => setSlides(new Map()), 260)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(done)
+    }
+  }, [fen])
+  return slides
 }
