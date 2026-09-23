@@ -9,5 +9,5 @@
     "outDir": "dist",
     "types": ["bun-types"]
   },
-  "include": ["src", "drizzle.config.ts"]
+  "include": ["src", "scripts", "drizzle.config.ts"]
 }

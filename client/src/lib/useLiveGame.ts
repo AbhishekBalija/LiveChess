@@ -134,7 +134,9 @@ export function useLiveGame(gameId: string): UseLiveGame {
     function scheduleReconnect(): void {
       if (cancelled || dead) return
       if (retryTimer) clearTimeout(retryTimer)
-      if (current.state !== null) setStatus("reconnecting")
+      // Always surface retrying, even before the first snapshot lands,
+      // so a down server never looks like plain loading.
+      setStatus("reconnecting")
       const delay = Math.min(1000 * 2 ** attempts, 10000)
       attempts += 1
       retryTimer = setTimeout(connect, delay)
@@ -143,7 +145,7 @@ export function useLiveGame(gameId: string): UseLiveGame {
     function connect(): void {
       if (cancelled || dead) return
       socket?.close()
-      if (current.state === null) setStatus("loading")
+      if (current.state === null && attempts === 0) setStatus("loading")
       const ws = new WebSocket(wsUrl(API_URL))
       socket = ws
       ws.onopen = () => {

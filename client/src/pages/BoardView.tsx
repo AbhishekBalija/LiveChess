@@ -42,7 +42,11 @@ export function BoardView() {
         </nav>
         <BoardPlaceholder />
         <p className="text-sm text-muted-foreground">
-          {status === "error" ? "Could not load this game." : "Loading board…"}
+          {status === "error"
+            ? "Could not load this game."
+            : status === "reconnecting"
+              ? "Can't reach server, retrying..."
+              : "Loading board…"}
         </p>
       </main>
     )

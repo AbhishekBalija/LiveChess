@@ -5,7 +5,12 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gateway": "bun src/gateway/index.ts",
+    "publisher": "bun src/publisher/index.ts",
+    "migrate": "drizzle-kit migrate",
+    "seed": "bun scripts/seed.ts",
+    "sim": "bun scripts/sim.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",
