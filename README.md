@@ -1,5 +1,7 @@
 # LiveChess
 
+[![CI](https://github.com/AbhishekBalija/LiveChess/actions/workflows/ci.yml/badge.svg)](https://github.com/AbhishekBalija/LiveChess/actions/workflows/ci.yml)
+
 Universal live-chess coverage from grassroots to elite events, with real-time boards, eval, and AI commentary.
 
 ## Run locally

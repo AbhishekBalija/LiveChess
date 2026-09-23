@@ -84,7 +84,7 @@ describe("seam 2 contract", () => {
 });
 
 const URL = process.env["TEST_DATABASE_URL"];
-const REDIS_URL = process.env["TEST_REDIS_URL"] ?? "redis://localhost:6379";
+const REDIS_URL = process.env["TEST_REDIS_URL"] ?? "redis://localhost:6379/1";
 
 describe.runIf(URL)("publisher integration", () => {
   let database: Db;
