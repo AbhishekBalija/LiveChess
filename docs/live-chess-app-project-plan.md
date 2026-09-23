@@ -2,6 +2,12 @@
 
 *A full record of how this project has developed in our conversation so far — the reasoning, the critiques, and the decisions — so nothing gets lost between sessions.*
 
+*Historical: this log covers the design conversation before implementation
+started (through architecture v4). Sections 4 and 5 below describe that
+point in time; the schema, adapter and wireframe-equivalent screens they
+list as not yet started have since been built. For current status, see
+`docs/roadmap.md` and `CHANGELOG.md`.*
+
 ---
 
 ## 1. Executive Summary

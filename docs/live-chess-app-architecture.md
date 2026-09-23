@@ -2,6 +2,12 @@
 
 *Engineering reference. See the companion Product Overview doc for the non-technical version.*
 
+*This is the target design written before implementation started. The
+outbox, versioning and resync pattern in Sections 2-4 is built (Slice 1,
+see `docs/adr/`); the eval, commentary and notification queues in Sections
+1 and 5 are not built yet (see `docs/roadmap.md` for what has actually
+shipped, Slice by Slice).*
+
 ---
 
 ## 1. System Architecture
@@ -63,15 +69,24 @@ flowchart TB
 
 ## 3. Move Identity, Versioning & the Outbox Pattern
 
-**Identity key:** `(game_id, move_number, source)`
+**Identity key:** `(game_id, ply, source)`. Built as `move_number`
+originally, then changed to `ply` before implementation (ADR 0001):
+full-move count alone collides White and Black at the same number,
+turning every Black move into a false correction.
 
-**Duplicate vs. correction:**
+**Duplicate vs. correction vs. truncation:**
 ```
 same key + same notation      → duplicate, no-op
 same key + different notation → correction:
                                    Game.version += 1
                                    emit GameCorrected
                                    old move row marked superseded, not deleted
+different SAN at ply N, later plies exist → truncation to N (ADR 0004):
+                                   every live ply after N marked superseded
+                                   Game checkpoint rewinds to N
+                                   Game.version += 1, emit GameTruncated
+                                   then the correction/insert path above runs
+                                   for ply N and any new plies after it
 ```
 
 **Versioned jobs (solves both backpressure and the correction race):**
