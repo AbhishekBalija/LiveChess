@@ -432,20 +432,50 @@ export async function runStreamWorker(
   }
 }
 
-export const nodeHttp: HttpPort = {
-  async get(url: string, accept = "application/json"): Promise<HttpResponse> {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: accept },
-    });
-    return {
-      status: res.status,
-      ok: res.ok,
-      headers: res.headers,
-      text: () => res.text(),
-      json: () => res.json() as Promise<unknown>,
-    };
-  },
-};
+// Lichess asks for a token with the study:read scope on every broadcast
+// endpoint; without one they are heavily rate-limited and may stop
+// working. So every request sends it, not just the stream.
+export function lichessHttp(token?: string): HttpPort {
+  return {
+    async get(url: string, accept = "application/json"): Promise<HttpResponse> {
+      const headers: Record<string, string> = { "User-Agent": USER_AGENT, Accept: accept };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(url, { headers });
+      return {
+        status: res.status,
+        ok: res.ok,
+        headers: res.headers,
+        text: () => res.text(),
+        json: () => res.json() as Promise<unknown>,
+      };
+    },
+  };
+}
+
+export const lichessToken = (): string | undefined => process.env["LICHESS_TOKEN"] || undefined;
+export const nodeHttp: HttpPort = lichessHttp(lichessToken());
+
+export const ACCOUNT_URL = "https://lichess.org/api/account";
+
+// Startup check. With a token: confirm it works and return the account
+// name (a bad token fails loudly instead of silently dropping to the
+// anonymous limits). Without one: null, and the caller warns.
+export async function checkLichessToken(http: HttpPort, token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  const res = await http.get(ACCOUNT_URL, "application/json");
+  if (res.status === 401) {
+    throw new Error("LICHESS_TOKEN was rejected by Lichess (401). Create a new one with the study:read scope.");
+  }
+  if (!res.ok) throw new Error(`Lichess account check failed with ${res.status}`);
+  const body = (await res.json()) as { username?: unknown };
+  return typeof body.username === "string" ? body.username : "unknown account";
+}
+
+export async function announceLichessAuth(http: HttpPort, token: string | undefined, who: string): Promise<void> {
+  const account = await checkLichessToken(http, token);
+  if (account) console.log(`${who}: using Lichess token of ${account}`);
+  else console.warn(`${who}: no LICHESS_TOKEN set; broadcast endpoints are heavily rate-limited without one (see README)`);
+}
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
@@ -455,12 +485,13 @@ if (import.meta.main) {
     console.error("usage: bun run ingest <broadcastRoundId> [--poll]");
     process.exit(1);
   }
+  const token = lichessToken();
+  await announceLichessAuth(nodeHttp, token, "ingest");
   if (poll) {
     // Fallback: the old 3s polling of the round export.
     const intervalMs = Number(process.env["INGEST_INTERVAL_MS"] ?? 3000);
     await runWorker(db(), nodeHttp, roundId, intervalMs);
   } else {
-    const token = process.env["LICHESS_TOKEN"] || undefined;
     await runStreamWorker(db(), nodeHttp, fetchStream(USER_AGENT, token), roundId);
     process.exit(0);
   }

@@ -36,6 +36,21 @@ When a round ends or leaves the live list it gets one final pull so every
 result is stored; on startup, rounds left with unfinished games get the
 same pull. Open http://localhost:5173.
 
+### Lichess token (free, recommended)
+
+Lichess asks for a token on every broadcast endpoint; without one they are
+heavily rate-limited and may stop working. Create one (logged in) at
+https://lichess.org/account/oauth/token/create?scopes[]=study:read&description=LiveChess
+(only the "Read private studies and broadcasts" permission), then add it to
+`server/.env`:
+
+```sh
+LICHESS_TOKEN=lip_...
+```
+
+On startup the supervisor and ingest worker log `using Lichess token of
+<your account>`, or fail with a clear message if Lichess rejects it.
+
 To watch the simulator instead of a real broadcast, run it in a second
 terminal:
 

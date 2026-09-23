@@ -2,7 +2,16 @@ import { and, isNotNull, eq, lt, sql } from "drizzle-orm";
 import { db, type Db } from "../db/client";
 import { games } from "../db/schema";
 import { fetchStream, type StreamPort } from "./stream";
-import { ingestRound, nodeHttp, runStreamWorker, USER_AGENT, type HttpPort, type TourCache } from "./worker";
+import {
+  announceLichessAuth,
+  ingestRound,
+  lichessToken,
+  nodeHttp,
+  runStreamWorker,
+  USER_AGENT,
+  type HttpPort,
+  type TourCache,
+} from "./worker";
 
 // Broadcast supervisor (issue #28). Instead of starting rounds by hand,
 // it keeps following whatever Lichess says is live:
@@ -189,7 +198,8 @@ export class Supervisor {
 }
 
 if (import.meta.main) {
-  const token = process.env["LICHESS_TOKEN"] || undefined;
+  const token = lichessToken();
+  await announceLichessAuth(nodeHttp, token, "supervisor");
   const opts: Required<SupervisorOptions> = {
     maxRounds: Number(process.env["SUPERVISOR_MAX_ROUNDS"] ?? 8),
     streamSlots: Number(process.env["SUPERVISOR_STREAM_SLOTS"] ?? (token ? 8 : 2)),
