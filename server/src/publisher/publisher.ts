@@ -18,6 +18,8 @@ export interface StreamFields extends Record<string, string> {
   ply: string;
   san: string;
   fen: string;
+  // Mover's clock after this move; empty when the source has none.
+  clock: string;
   version: string;
 }
 
@@ -53,6 +55,7 @@ export function buildWrites(row: {
     ply: str(row.payload["ply"]),
     san: str(row.payload["san"] ?? row.payload["newSan"]),
     fen: str(row.payload["fen"]),
+    clock: str(row.payload["clock"]),
     version: str(row.payload["version"]),
   };
   // Cache follows the checkpoint snapshot, never the event itself, so a

@@ -7,6 +7,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Matchday design system (#19): navy, lime and gold tokens, Barlow
+  Condensed / Manrope / JetBrains Mono, app shell with a desktop top bar
+  and a phone bottom nav, Chessnut SVG pieces (Apache-2.0).
+- Six board palettes, one per game picked from its id, so each game keeps
+  its colors everywhere.
+- Home redesign: competition tabs, scoreboard match cards with clocks,
+  featured game, more live boards, finished games tab.
+- Board page redesign: scoreboard with big clocks and game status, "updated
+  Xs ago" stale-feed hint, phone layout with the board between players.
+- Clocks end to end: games list, resync and live events carry each move's
+  %clk.
 - `bun run dev [roundId]` at the repo root starts gateway, publisher and
   client (plus ingestion for a round) with prefixed logs; Ctrl+C stops all.
 - Streaming ingestion: the worker holds the Lichess round stream open

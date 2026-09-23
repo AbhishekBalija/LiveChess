@@ -19,6 +19,7 @@ export function entryToEvent(fields: Record<string, string>): LiveEvent {
     ply: fields["ply"] ?? "",
     san: fields["san"] ?? "",
     fen: fields["fen"] ?? "",
+    clock: fields["clock"] ?? "",
     version: fields["version"] ?? "",
   };
 }

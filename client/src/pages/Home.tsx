@@ -1,118 +1,198 @@
-import { Children, type ReactNode } from "react"
-import { LiveGameCard, LiveGameCardSkeleton } from "@/components/LiveGameCard"
+import { useState, type ReactNode } from "react"
+import { Link } from "react-router"
+import { AppShell } from "@/components/AppShell"
+import { ChessBoard } from "@/components/ChessBoard"
+import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
+import { paletteFor } from "@/lib/boardPalette"
+import { useNow } from "@/lib/clock"
+import { splitTournamentName, surname } from "@/lib/names"
+import { formatMove, sideToMove } from "@/lib/ply"
 import { useLiveGames } from "@/lib/useLiveGames"
 import type { GameListItem } from "@/types"
 
-// Home leads with what is live (product principle: live first, one tap
-// to any board). Games are grouped by tournament, each group a
-// horizontal strip that scrolls sideways on phones.
+// Home (issue #19, Matchday design). What is live comes first: a tab row
+// of competitions, a sideways strip of scoreboard cards, the featured
+// game, then every other live board, each in its own board colors.
 
-interface TournamentGroup {
-  id: string
-  title: string
-  subtitle: string | null
-  games: GameListItem[]
-}
+type Tab = { id: string; label: string; tournamentId?: string; finished?: boolean }
 
-// Lichess names look like "46th FIDE Chess Olympiad 2026 | Open | Matches 1-12".
-// First part is the title, the rest reads better as a quiet subtitle.
-export function splitTournamentName(name: string): { title: string; subtitle: string | null } {
-  const [title = name, ...rest] = name.split("|").map((part) => part.trim()).filter(Boolean)
-  return { title, subtitle: rest.length > 0 ? rest.join(" · ") : null }
-}
-
-// Groups keep the order of their first game, which is already stable.
-function groupByTournament(games: GameListItem[]): TournamentGroup[] {
-  const groups = new Map<string, TournamentGroup>()
-  for (const game of games) {
-    let group = groups.get(game.tournament.id)
-    if (!group) {
-      group = { id: game.tournament.id, ...splitTournamentName(game.tournament.name), games: [] }
-      groups.set(game.tournament.id, group)
-    }
-    group.games.push(game)
+function tabsFor(games: GameListItem[]): Tab[] {
+  const tournaments = new Map<string, { name: string; count: number }>()
+  for (const g of games) {
+    const t = tournaments.get(g.tournament.id) ?? { name: splitTournamentName(g.tournament.name).title, count: 0 }
+    t.count += 1
+    tournaments.set(g.tournament.id, t)
   }
-  return [...groups.values()]
+  return [
+    { id: "live", label: `All live (${games.length})` },
+    ...[...tournaments].map(([id, t]) => ({ id, label: `${t.name} (${t.count})`, tournamentId: id })),
+    { id: "finished", label: "Finished", finished: true },
+  ]
 }
 
 export function Home() {
-  const { games, failing } = useLiveGames()
-  const groups = games ? groupByTournament(games) : []
+  const [tabId, setTabId] = useState("live")
+  const live = useLiveGames("live")
+  const tabs = tabsFor(live.games ?? [])
+  const tab = tabs.find((t) => t.id === tabId) ?? tabs[0]!
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-4">
-      <header className="flex flex-col gap-1 pt-2">
-        <h1 className="text-2xl font-bold tracking-tight">LiveChess</h1>
-        <p className="text-sm text-muted-foreground">Live boards from grassroots to elite events.</p>
-      </header>
+    <AppShell>
+      <div role="tablist" aria-label="Competitions" className="flex gap-7 overflow-x-auto border-b border-border px-4 [scrollbar-width:none] md:px-8 lg:px-12">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={t.id === tab.id}
+            onClick={() => setTabId(t.id)}
+            className={`h-12 shrink-0 border-b-[3px] text-sm font-semibold whitespace-nowrap md:text-[15px] ${
+              t.id === tab.id ? "border-live font-bold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      <section aria-labelledby="live-now" className="flex flex-col gap-6">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="live-now" className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-            <span aria-hidden className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60" />
-              <span className="relative inline-flex size-2 rounded-full bg-red-500" />
-            </span>
-            Live now
-            {games && games.length > 0 && (
-              <span className="font-normal text-muted-foreground tabular-nums">{games.length}</span>
-            )}
-          </h2>
-          {failing && (
-            <span role="status" className="text-xs text-amber-400">
-              Can't reach server, retrying...
-            </span>
-          )}
-        </div>
-
-        {games === null ? (
-          <Strip label="Loading live games">
-            {Array.from({ length: 6 }, (_, i) => (
-              <LiveGameCardSkeleton key={i} />
-            ))}
-          </Strip>
-        ) : groups.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-            No live games right now.
+      <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-8 py-6 md:py-8">
+        {live.failing && (
+          <p role="status" className="px-4 text-sm text-destructive md:px-8 lg:px-12">
+            Can't reach server, retrying...
           </p>
-        ) : (
-          groups.map((group) => (
-            <section key={group.id} aria-label={group.title} className="flex flex-col gap-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-base font-semibold">{group.title}</h3>
-                  {group.subtitle && (
-                    <p className="truncate text-xs text-muted-foreground">{group.subtitle}</p>
-                  )}
-                </div>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {group.games.length} live
-                </span>
-              </div>
-              <Strip label={`${group.title} live games`}>
-                {group.games.map((game) => (
-                  <LiveGameCard key={game.id} game={game} />
-                ))}
-              </Strip>
-            </section>
-          ))
         )}
-      </section>
-    </main>
+        {tab.finished ? (
+          <FinishedGames />
+        ) : (
+          <LiveGames games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null} />
+        )}
+      </main>
+    </AppShell>
   )
 }
 
-// Sideways strip. Bleeds to the screen edge on phones so the cut-off
-// card hints that there is more to scroll.
-function Strip({ label, children }: { label: string; children: ReactNode }) {
+function LiveGames({ games }: { games: GameListItem[] | null }) {
+  const now = useNow()
+  if (games === null) {
+    return (
+      <Strip>
+        {Array.from({ length: 4 }, (_, i) => (
+          <MatchCardSkeleton key={i} className="w-[300px] shrink-0 md:w-[330px]" />
+        ))}
+      </Strip>
+    )
+  }
+  if (games.length === 0) {
+    return (
+      <p className="mx-4 rounded-lg border border-dashed border-line-strong px-4 py-12 text-center text-sm text-muted-foreground md:mx-8 lg:mx-12">
+        No live games right now.
+      </p>
+    )
+  }
+  const [featured, ...rest] = games
   return (
-    <ul
-      aria-label={label}
-      className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pt-1 pb-3 [scrollbar-width:thin]"
-    >
-      {Children.map(children, (child) => (
-        <li className="shrink-0 snap-start">{child}</li>
+    <>
+      <Strip>
+        {games.map((g) => (
+          <MatchCard key={g.id} game={g} now={now} className="w-[300px] shrink-0 snap-start md:w-[330px]" />
+        ))}
+      </Strip>
+      {featured && <Featured game={featured} />}
+      {rest.length > 0 && (
+        <section aria-labelledby="more-boards" className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
+          <h2 id="more-boards" className="text-[17px] font-bold md:text-lg">More live boards</h2>
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4">
+            {rest.map((g) => (
+              <li key={g.id}>
+                <BoardTile game={g} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  )
+}
+
+function FinishedGames() {
+  const { games } = useLiveGames("finished")
+  if (games === null) {
+    return (
+      <div className="grid gap-4 px-4 sm:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-12">
+        {Array.from({ length: 3 }, (_, i) => (
+          <MatchCardSkeleton key={i} />
+        ))}
+      </div>
+    )
+  }
+  if (games.length === 0) {
+    return <p className="px-4 text-sm text-muted-foreground md:px-8 lg:px-12">No finished games yet.</p>
+  }
+  return (
+    <ul className="grid gap-4 px-4 sm:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-12">
+      {games.map((g) => (
+        <li key={g.id}>
+          <MatchCard game={g} />
+        </li>
       ))}
     </ul>
+  )
+}
+
+// Sideways strip; bleeds to the screen edge so a cut-off card hints at more.
+function Strip({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] md:scroll-px-8 md:gap-4 md:px-8 lg:scroll-px-12 lg:px-12">
+      {children}
+    </div>
+  )
+}
+
+function Featured({ game }: { game: GameListItem }) {
+  const toMove = sideToMove(game.lastPly + 1) === "white" ? "White" : "Black"
+  return (
+    <section aria-labelledby="featured" className="px-4 md:px-8 lg:px-12">
+      <h2 id="featured" className="mb-3 text-[17px] font-bold md:sr-only">Featured game</h2>
+      <Link
+        to={`/games/${game.id}`}
+        className="flex gap-4 rounded-[20px] bg-card p-3.5 transition-colors hover:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:gap-7 md:p-6"
+      >
+        <div className="w-[120px] shrink-0 md:w-[320px]">
+          <ChessBoard fen={game.fen || undefined} palette={paletteFor(game.id)} coords={false} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 md:gap-4">
+          <span className="hidden text-xs font-bold tracking-[0.08em] text-muted-foreground uppercase md:block">
+            Featured game
+          </span>
+          <span className="font-display text-xl leading-[1.05] font-bold uppercase md:text-4xl">
+            {surname(game.white)} <span className="text-muted-foreground">vs</span> {surname(game.black)}
+          </span>
+          <span className="text-[13px] font-bold text-gold md:text-xl">
+            {game.lastSan ? `${toMove} to move after ${formatMove(game.lastPly, game.lastSan)}` : "Not started yet"}
+          </span>
+          <span className="truncate text-[13px] text-muted-foreground md:text-sm">
+            {splitTournamentName(game.tournament.name).title}
+          </span>
+        </div>
+      </Link>
+    </section>
+  )
+}
+
+function BoardTile({ game }: { game: GameListItem }) {
+  return (
+    <Link
+      to={`/games/${game.id}`}
+      className="flex flex-col gap-2 rounded-lg p-0 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:gap-3 md:bg-card md:p-4 md:hover:bg-secondary/60"
+    >
+      <ChessBoard fen={game.fen || undefined} palette={paletteFor(game.id)} coords={false} />
+      <div className="flex min-w-0 flex-col gap-0.5 md:gap-1">
+        <span className="truncate text-xs font-semibold md:text-sm md:font-bold">{game.white}</span>
+        <span className="hidden truncate text-sm text-muted-foreground md:block">{game.black}</span>
+        <span className="font-display text-[15px] font-bold text-primary md:text-lg">
+          {game.lastSan ? formatMove(game.lastPly, game.lastSan) : "Not started"}
+        </span>
+      </div>
+    </Link>
   )
 }

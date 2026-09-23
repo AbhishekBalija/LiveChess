@@ -23,22 +23,6 @@ export function fenToBoard(fen: string): BoardSquare[][] {
   return board
 }
 
-// One filled set for both sides; the component colors them. The
-// outline set read poorly on light squares.
-const GLYPHS: Record<string, string> = {
-  K: "♚",
-  Q: "♛",
-  R: "♜",
-  B: "♝",
-  N: "♞",
-  P: "♟",
-}
-
-export function pieceGlyph(piece: string): { glyph: string; side: "white" | "black" } {
-  const side = piece === piece.toUpperCase() ? "white" : "black"
-  return { glyph: GLYPHS[piece.toUpperCase()] ?? "?", side }
-}
-
 // Squares whose contents differ between two positions: the last move's
 // from/to (four squares for castling, three for en passant). SAN alone
 // does not name the from-square, so diffing FENs is the cheap route.

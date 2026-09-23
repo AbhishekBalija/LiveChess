@@ -134,8 +134,10 @@ describe.runIf(URL)("publisher integration", () => {
     }
     const claimed = await pollOnce(database, port);
     expect(claimed).toBeGreaterThanOrEqual(2);
-    const entries = await redis.xread("COUNT", 100, "STREAMS", STREAM, "0");
-    const mine = (entries?.[0]?.[1] ?? []).filter(([, f]) => {
+    // Newest entries, oldest first: the test stream keeps entries from
+    // earlier runs, so reading from the start would miss this run's.
+    const entries = (await redis.xrevrange(STREAM, "+", "-", "COUNT", 100)).reverse();
+    const mine = entries.filter(([, f]) => {
       const obj = Object.fromEntries(
         Array.from({ length: f.length / 2 }, (_, i) => [f[i * 2], f[i * 2 + 1]]),
       );
@@ -167,6 +169,7 @@ describe("buildWrites for a takeback", () => {
       ply: "2",
       san: "",
       fen: "fen-2",
+      clock: "",
       version: "6",
     });
     expect(writes.cache).toEqual({ fen: "fen-2", version: "6", lastPly: "2", lastSan: "e5" });

@@ -10,6 +10,8 @@ const g = (id: string): GameListItem => ({
   tournament: { id: "t", name: "T" },
   lastPly: 1,
   lastSan: "e4",
+  whiteClock: null,
+  blackClock: null,
   fen: "",
   version: 1,
   updatedAt: "",

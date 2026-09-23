@@ -25,17 +25,19 @@ export function stableOrder(previous: GameListItem[] | null, next: GameListItem[
   return [...known, ...fresh]
 }
 
-export function useLiveGames(): UseLiveGames {
+export function useLiveGames(status: "live" | "finished" = "live"): UseLiveGames {
   const [games, setGames] = useState<GameListItem[] | null>(null)
   const [failing, setFailing] = useState(false)
 
   useEffect(() => {
+    // A different list: start clean instead of merging into the old one.
+    setGames(null)
     let cancelled = false
     let timer: ReturnType<typeof setInterval> | undefined
 
     async function load(): Promise<void> {
       try {
-        const res = await fetch(`${API_URL}/games?status=live`)
+        const res = await fetch(`${API_URL}/games?status=${status}`)
         if (!res.ok) throw new Error(`games list failed with ${res.status}`)
         const body = (await res.json()) as { games: GameListItem[] }
         if (cancelled) return
@@ -65,7 +67,7 @@ export function useLiveGames(): UseLiveGames {
       if (timer) clearInterval(timer)
       document.removeEventListener("visibilitychange", onVisibility)
     }
-  }, [])
+  }, [status])
 
   return { games, failing }
 }

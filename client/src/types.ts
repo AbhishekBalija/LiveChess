@@ -10,6 +10,7 @@ export interface MissedMove {
   ply: number
   san: string
   fen: string
+  clock: string | null
   version: number
 }
 
@@ -22,6 +23,10 @@ export interface GameStateResponse {
   // Only on the Postgres path; a cache fast-path resync omits them.
   white?: string
   black?: string
+  tournament?: string
+  // Postgres path only: "*" while in progress, and when the last change landed.
+  result?: string
+  updatedAt?: string
 }
 
 // One row of GET /games (server/src/api/games.ts).
@@ -33,6 +38,8 @@ export interface GameListItem {
   tournament: { id: string; name: string }
   lastPly: number
   lastSan: string | null
+  whiteClock: string | null
+  blackClock: string | null
   fen: string
   version: number
   updatedAt: string
