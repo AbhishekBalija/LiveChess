@@ -1,5 +1,7 @@
 import { Redis } from "ioredis";
 import { drizzleGamesDb, GamesHttpError, listGames, parseStatus } from "../api/games";
+import { UpcomingCache } from "../api/upcoming";
+import { nodeHttp } from "../ingestion/worker";
 import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
 import { db } from "../db/client";
 import { consumeOnce } from "./consumer";
@@ -86,6 +88,20 @@ async function handleGamesGet(req: Request): Promise<Response | null> {
   }
 }
 
+// Rounds starting soon, from Lichess's broadcast list (cached 5 minutes).
+const upcoming = new UpcomingCache(nodeHttp);
+
+async function handleUpcomingGet(req: Request): Promise<Response | null> {
+  const url = new URL(req.url);
+  if (url.pathname !== "/upcoming" || req.method !== "GET") return null;
+  try {
+    return Response.json({ rounds: await upcoming.get() }, { headers: corsHeaders() });
+  } catch (err) {
+    console.error("upcoming failed", err);
+    return Response.json({ error: "upcoming unavailable" }, { status: 502, headers: corsHeaders() });
+  }
+}
+
 const router = new Router();
 const sockets = new Map<object, { send(message: string): void }>();
 
@@ -140,7 +156,7 @@ void pump();
 Bun.serve({
   port: PORT,
   async fetch(req, server) {
-    const state = (await handleStateGet(req)) ?? (await handleGamesGet(req));
+    const state = (await handleStateGet(req)) ?? (await handleGamesGet(req)) ?? (await handleUpcomingGet(req));
     if (state) return state;
     if (server.upgrade(req)) return;
     return new Response("livechess gateway", { status: 200 });
