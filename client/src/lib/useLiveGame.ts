@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { API_URL } from "@/lib/api"
 import type { GameStateResponse } from "@/types"
 import {
   applyEvent,
@@ -8,9 +9,6 @@ import {
   type GameState,
 } from "./game"
 
-// Gateway base URL; the ws:// URL is derived from it.
-const API_URL =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001"
 
 function wsUrl(api: string): string {
   const url = new URL(api)

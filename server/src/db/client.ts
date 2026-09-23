@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { IngestOutcome } from "../ingestion/handler";
@@ -78,6 +78,7 @@ export async function persistIngestResultTx(
         version: result.version,
         currentFen: result.move.fen,
         lastPly: result.move.ply,
+        updatedAt: sql`now()`,
       })
       .where(eq(games.id, gameId));
     checkpoint = {
@@ -89,7 +90,7 @@ export async function persistIngestResultTx(
   } else {
     await tx
       .update(games)
-      .set({ version: result.version })
+      .set({ version: result.version, updatedAt: sql`now()` })
       .where(eq(games.id, gameId));
     const [current] = await tx
       .select({ san: moves.san })

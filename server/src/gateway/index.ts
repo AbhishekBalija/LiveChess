@@ -1,4 +1,5 @@
 import { Redis } from "ioredis";
+import { drizzleGamesDb, GamesHttpError, listGames, parseStatus } from "../api/games";
 import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
 import { db } from "../db/client";
 import { consumeOnce } from "./consumer";
@@ -61,6 +62,30 @@ async function handleStateGet(req: Request): Promise<Response | null> {
   }
 }
 
+// Games list for the home live strip. Same CORS posture as resync.
+async function handleGamesGet(req: Request): Promise<Response | null> {
+  const url = new URL(req.url);
+  if (url.pathname !== "/games") return null;
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: { ...corsHeaders(), "Access-Control-Allow-Methods": "GET, OPTIONS" },
+    });
+  }
+  if (req.method !== "GET") return null;
+  try {
+    const status = parseStatus(url.searchParams.get("status"));
+    const body = await listGames(drizzleGamesDb(db()), status);
+    return Response.json(body, { headers: corsHeaders() });
+  } catch (err) {
+    if (err instanceof GamesHttpError) {
+      return Response.json({ error: err.message }, { status: err.status, headers: corsHeaders() });
+    }
+    console.error("games list failed", err);
+    return Response.json({ error: "internal error" }, { status: 500, headers: corsHeaders() });
+  }
+}
+
 const router = new Router();
 const sockets = new Map<object, { send(message: string): void }>();
 
@@ -115,7 +140,7 @@ void pump();
 Bun.serve({
   port: PORT,
   async fetch(req, server) {
-    const state = await handleStateGet(req);
+    const state = (await handleStateGet(req)) ?? (await handleGamesGet(req));
     if (state) return state;
     if (server.upgrade(req)) return;
     return new Response("livechess gateway", { status: 200 });

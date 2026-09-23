@@ -22,6 +22,13 @@
       "when": 1790161736070,
       "tag": "0002_lowly_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790171349512,
+      "tag": "0003_youthful_victor_mancha",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import {
   type HttpPort,
   type HttpResponse,
   type TourCache,
+  normalizeResult,
 } from "./worker";
 
 function response(
@@ -298,5 +299,16 @@ describe.runIf(URL)("worker integration", () => {
     await ingestRound(database, counting, "rrrrrrrr", cache);
     expect(metaCalls).toBe(1);
     await sql.end();
+  });
+});
+
+describe("normalizeResult", () => {
+  it("keeps final scores and treats everything else as in progress", () => {
+    expect(normalizeResult("1-0")).toBe("1-0");
+    expect(normalizeResult("0-1")).toBe("0-1");
+    expect(normalizeResult("1/2-1/2")).toBe("1/2-1/2");
+    expect(normalizeResult("*")).toBe("*");
+    expect(normalizeResult(undefined)).toBe("*");
+    expect(normalizeResult("?")).toBe("*");
   });
 });

@@ -7,6 +7,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -37,6 +38,10 @@ export const games = pgTable(
     version: integer("version").notNull().default(0),
     currentFen: text("current_fen").notNull().default(""),
     lastPly: integer("last_ply").notNull().default(0),
+    // PGN Result header: "*" while the game is in progress, else the score.
+    result: text("result").notNull().default("*"),
+    // Bumped with every checkpoint change, so lists can show latest activity first.
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("games_source_idx").on(t.source, t.sourceId)],
 );

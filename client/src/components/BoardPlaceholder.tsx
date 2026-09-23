@@ -11,9 +11,12 @@ const FILES = "abcdefgh"
 export function BoardPlaceholder({
   fen,
   highlight,
+  coords = true,
 }: {
   fen?: string
   highlight?: Set<string>
+  // Thumbnails turn coordinates off; they are noise at that size.
+  coords?: boolean
 }) {
   const board = fen ? fenToBoard(fen) : null
   return (
@@ -37,12 +40,12 @@ export function BoardPlaceholder({
             }`}
           >
             {lit && <span aria-hidden className="absolute inset-0 bg-yellow-300/45" />}
-            {fileIndex === 0 && (
+            {coords && fileIndex === 0 && (
               <Coord className="top-[0.4cqw] left-[0.6cqw]" light={light}>
                 {8 - row}
               </Coord>
             )}
-            {row === 7 && (
+            {coords && row === 7 && (
               <Coord className="right-[0.6cqw] bottom-[0.2cqw]" light={light}>
                 {FILES[fileIndex]}
               </Coord>
