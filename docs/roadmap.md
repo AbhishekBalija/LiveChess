@@ -32,36 +32,51 @@ flowchart LR
 - Engagement features (alerts, polls) need accounts and notifications, so
   they come after the app has enough content to be worth returning to.
 
-## Slice 1: Live spine (closing)
+## Slice 1: Live spine (done)
 
 Lichess broadcast ingestion, outbox, publisher, WebSocket gateway, resync,
-live board. Parent issue #1.
+live board. Parent issue #1, closed.
 
 - [x] Schema, adapter, Move Handler, outbox publisher, gateway, resync
 - [x] Client scaffold and live board wiring
 - [x] Lichess ingestion worker (Version loaded from Postgres)
-- [ ] Home live strip from real data (games list endpoint)
-- [ ] Walkthrough on a live round, close #1
+- [x] Home live strip from real data (games list endpoint, #14)
+- [x] Walkthrough on a live round, close #1 (verified against the 46th
+      FIDE Chess Olympiad, 0.1.0)
 
 ## Slice 1.5: Solid and deployed
 
 Nothing new for fans; make what exists trustworthy and public.
 
-- CI on every PR (typecheck, lint, test) and CHANGELOG.md
-- Takebacks: correction at ply N supersedes later plies (#12, ADR 0004)
-- Streaming ingestion (Lichess round stream) instead of 3s polling
-- Stale-feed indicator: "last update Xs ago", so the Live dot cannot lie
-  when the publisher or ingest is down
-- Fix the flaky publisher integration test (shared DB and stream)
-- One command to run everything locally
-- Deploy: hosted Postgres and Redis, the four server processes, the client,
-  environment files per stage, basic error tracking
+- [x] CI on every PR (typecheck, lint, test) and CHANGELOG.md (#16)
+- [x] Takebacks: correction at ply N supersedes later plies (#12, ADR 0004)
+- [x] Streaming ingestion (Lichess round stream) instead of 3s polling (#20)
+- [x] Design foundation: Matchday design system, redesigned home and board
+      pages, clocks delivered early alongside it (#19)
+- [x] Stale-feed indicator: board page shows "Live · last move Xm ago", so
+      the Live dot cannot lie when the publisher or ingest is down
+- [x] Fix the flaky publisher integration test (shared DB and stream)
+- [x] One command to run everything locally: `bun run dev` (#17)
+- [x] Broadcast supervisor: follows live Lichess rounds on its own instead
+      of starting them by hand (#28, ADR 0005)
+- [x] "Starting soon": upcoming rounds within a week (`GET /upcoming`),
+      pulled forward from Slice 4 since the supervisor's broadcast list
+      already had the data (PR #30)
+- [ ] Deploy: hosted Postgres and Redis, the four server processes, the
+      client, environment files per stage, basic error tracking (#18,
+      blocked on host decisions, `needs-info`)
+- [ ] Hardening backlog from the post-Slice-1.5 code scan, filed as
+      separate issues rather than blocking: gateway fan-out is
+      O(connections) per event (#32), outbox and stream retention (#33),
+      WebSocket heartbeat (#34). Settings validation, WebSocket frame
+      parsing, illegal-move handling and an outbox index are in PR #35.
 
 ## Slice 2: The board feels alive
 
-- Clocks: show remaining time per side (already stored in `moves.clock`),
-  ticking locally for the side to move
-- Results and finished games: result badge, finished section, game over state
+- [x] Clocks: show remaining time per side, ticking locally for the side
+      to move (delivered early with the Slice 1.5 design foundation, #19)
+- [x] Results and finished games: result line, home Finished tab, board
+      game-over state (delivered early alongside clocks, #19)
 - Eval: Stockfish job per new Version via BullMQ, eval stored per ply and
   pushed through the outbox like moves
 - Win-probability bar from eval
@@ -77,13 +92,13 @@ Nothing new for fans; make what exists trustworthy and public.
 
 ## Slice 4: Coverage beyond Lichess
 
-- ADR 0005: cross-source game identity (match by event, round, board,
+- New ADR: cross-source game identity (match by event, round, board,
   players; one primary source per game writes moves; others linked in a
-  `game_sources` table as fallback)
+  `game_sources` table as fallback). Numbered when written, next after the
+  highest number in `docs/adr/` at the time.
 - Generic PGN URL adapter (organizer live.pgn files)
 - DGT LiveChess Cloud adapter (unofficial feed, isolated behind its adapter)
 - Tournament pages: rounds, pairings, standings
-- Upcoming tournaments and fixtures
 
 ## Slice 5: Round out the app
 
