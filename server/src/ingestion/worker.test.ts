@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
@@ -181,6 +181,33 @@ describe.runIf(URL)("worker integration", () => {
     };
   }
 
+  async function gameRow(sourceId: string) {
+    const [row] = await database.select().from(games).where(eq(games.sourceId, sourceId));
+    if (!row) throw new Error(`game ${sourceId} missing`);
+    return row;
+  }
+
+  async function maxOutboxId(): Promise<number> {
+    const [row] = await database
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .orderBy(desc(outboxEvents.id))
+      .limit(1);
+    return row?.id ?? 0;
+  }
+
+  // One game's outbox event types written after `afterId`, oldest first.
+  async function outboxTypesSince(gameId: string, afterId: number): Promise<string[]> {
+    const rows = await database
+      .select()
+      .from(outboxEvents)
+      .where(gt(outboxEvents.id, afterId))
+      .orderBy(asc(outboxEvents.id));
+    return rows
+      .filter((r) => (r.payload as { gameId?: string }).gameId === gameId)
+      .map((r) => r.eventType);
+  }
+
   async function gameVersion(sourceId: string): Promise<number> {
     const [row] = await database
       .select({ version: games.version })
@@ -254,30 +281,54 @@ describe.runIf(URL)("worker integration", () => {
     expect(after.outbox - before.outbox).toBe(1);
   });
 
-  it("a changed SAN yields one GameCorrected at previous plus one", async () => {
+  it("a changed SAN with later plies truncates, corrects, then re-adds the new line", async () => {
+    // Stored: e4 e5 Nf3 Nc6 Bb5 (v5). The PGN now has Bc4 at ply 3, so
+    // plies 4 and 5 came from the old line and must be replaced (ADR 0004).
     currentPgn = PGN.replace(
       "2. Nf3 { [%eval 0.2] [%clk 0:02:55] }",
       "2. Bc4 { [%clk 0:02:54] }",
     ).replace("2... Nc6 { [%clk 0:02:57] } *", "2... Nc6 { [%clk 0:02:57] } 3. Bb5 { [%clk 0:02:50] } *");
     const before = await scopedCounts();
+    const lastId = await maxOutboxId();
     const result = await ingestRound(database, http, "rrrrrrrr");
-    expect(result).toMatchObject({ corrections: 1 });
-    expect(await gameVersion("aaaaaaaa")).toBe(6);
-    const [gameA] = await database
-      .select({ id: games.id })
-      .from(games)
-      .where(eq(games.sourceId, "aaaaaaaa"));
-    if (!gameA) throw new Error("game aaaaaaaa missing");
-    const rows = await database
-      .select()
-      .from(moves)
-      .where(eq(moves.gameId, gameA.id));
-    const atThree = rows.filter((r) => r.ply === 3);
-    expect(atThree).toHaveLength(2);
-    expect(atThree.filter((r) => r.superseded)).toHaveLength(1);
-    expect(atThree.find((r) => !r.superseded)?.san).toBe("Bc4");
+    expect(result).toMatchObject({ truncations: 1, corrections: 1, inserted: 2 });
+    // v6 truncate to ply 3, v7 correct ply 3, v8 and v9 re-add plies 4 and 5.
+    expect(await gameVersion("aaaaaaaa")).toBe(9);
+    const gameA = await gameRow("aaaaaaaa");
+    const rows = await database.select().from(moves).where(eq(moves.gameId, gameA.id));
+    const live = rows.filter((r) => !r.superseded).sort((a, b) => a.ply - b.ply);
+    expect(live.map((r) => r.san)).toEqual(["e4", "e5", "Bc4", "Nc6", "Bb5"]);
+    expect(live.map((r) => r.version)).toEqual([1, 2, 7, 8, 9]);
+    expect(gameA.lastPly).toBe(5);
     const after = await scopedCounts();
-    expect(after.outbox - before.outbox).toBe(1);
+    expect(after.outbox - before.outbox).toBe(4);
+    const types = await outboxTypesSince(gameA.id, lastId);
+    expect(types).toEqual(["GameTruncated", "GameCorrected", "MoveReceived", "MoveReceived"]);
+  });
+
+  it("a shorter PGN truncates and rewinds the checkpoint", async () => {
+    currentPgn = PGN.replace(
+      "2. Nf3 { [%eval 0.2] [%clk 0:02:55] } 2... Nc6 { [%clk 0:02:57] } *",
+      "*",
+    );
+    const result = await ingestRound(database, http, "rrrrrrrr");
+    expect(result).toMatchObject({ truncations: 1, inserted: 0, corrections: 0 });
+    const gameA = await gameRow("aaaaaaaa");
+    expect(gameA.version).toBe(10);
+    expect(gameA.lastPly).toBe(2);
+    const [ply2] = await database
+      .select({ fen: moves.fen })
+      .from(moves)
+      .where(and(eq(moves.gameId, gameA.id), eq(moves.ply, 2), eq(moves.superseded, false)));
+    expect(gameA.currentFen).toBe(ply2?.fen);
+    const live = await database
+      .select({ ply: moves.ply })
+      .from(moves)
+      .where(and(eq(moves.gameId, gameA.id), eq(moves.superseded, false)));
+    expect(live.map((r) => r.ply).sort()).toEqual([1, 2]);
+    // Re-polling the same short PGN is a no-op.
+    const again = await ingestRound(database, http, "rrrrrrrr");
+    expect(again).toMatchObject({ truncations: 0, inserted: 0, corrections: 0 });
     await sql.end();
   });
 

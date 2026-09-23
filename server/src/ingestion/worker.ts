@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
-import { db, persistIngestResultTx, type Db, type DbTx } from "../db/client";
+import { db, persistIngestResultTx, persistTruncateTx, type Db, type DbTx } from "../db/client";
 import { games, moves, tournaments } from "../db/schema";
-import { applyMoveReceived, type GameState } from "./handler";
+import { applyMoveReceived, applyTruncate, planTruncation, type GameState } from "./handler";
 import {
   broadcastSlugs,
   gameSourceId,
@@ -159,6 +159,7 @@ export async function upsertGame(
 export interface GameCounts {
   inserted: number;
   corrections: number;
+  truncations: number;
   noops: number;
 }
 
@@ -170,7 +171,7 @@ export async function ingestGame(
   gameId: string,
   plies: Array<{ ply: number; san: string; fen: string; clock: string | null }>,
 ): Promise<GameCounts> {
-  const counts: GameCounts = { inserted: 0, corrections: 0, noops: 0 };
+  const counts: GameCounts = { inserted: 0, corrections: 0, truncations: 0, noops: 0 };
   await database.transaction(async (tx) => {
     const [game] = await tx
       .select()
@@ -198,6 +199,13 @@ export async function ingestGame(
         ]),
       ),
     };
+    // Takeback first (ADR 0004): drop plies from the old line, then the
+    // normal per-ply path fixes the changed ply and re-adds the new line.
+    const toPly = planTruncation(state, plies);
+    if (toPly !== null) {
+      await persistTruncateTx(tx, gameId, applyTruncate(state, toPly));
+      counts.truncations += 1;
+    }
     for (const ply of plies) {
       const outcome = applyMoveReceived(state, {
         ply: ply.ply,
@@ -237,7 +245,7 @@ export async function ingestRound(
 ): Promise<PollCounts> {
   const pgn = await fetchRoundPgn(http, roundId);
   const parts = splitPgnGames(pgn);
-  const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, noops: 0 };
+  const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, truncations: 0, noops: 0 };
   let tournamentId = tourCache?.tournamentId ?? null;
   for (const part of parts) {
     let game: ReturnType<typeof parseBroadcastGame>;
@@ -273,6 +281,7 @@ export async function ingestRound(
     counts.games += 1;
     counts.inserted += gameCounts.inserted;
     counts.corrections += gameCounts.corrections;
+    counts.truncations += gameCounts.truncations;
     counts.noops += gameCounts.noops;
   }
   return counts;
@@ -292,7 +301,7 @@ export async function runWorker(
     try {
       const counts = await ingestRound(database, http, roundId, tourCache);
       console.log(
-        `ingest ${roundId}: ${counts.games} games, +${counts.inserted} moves, ~${counts.corrections} corrections`,
+        `ingest ${roundId}: ${counts.games} games, +${counts.inserted} moves, ~${counts.corrections} corrections, -${counts.truncations} takebacks`,
       );
     } catch (err) {
       if (err instanceof RateLimitedError) {

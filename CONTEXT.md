@@ -36,5 +36,9 @@ Monotonic counter per game bumped on every new ply and every correction, the sin
 Same identity key with different SAN, superseding the old row without deletion.
 _Avoid_: update, overwrite
 
+**Truncation**:
+Superseding every live Ply after a given Ply because the source took moves back, rewinding the game to that Ply (ADR 0004).
+_Avoid_: rollback, delete, undo
+
 **Clock**:
 Remaining time for the side to move at a ply, parsed from Lichess `%clk` and stored unused in Slice 1.

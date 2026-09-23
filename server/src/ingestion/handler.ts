@@ -25,7 +25,7 @@ export interface IngestInput {
 }
 
 export interface OutboxRow {
-  eventType: "MoveReceived" | "GameCorrected";
+  eventType: "MoveReceived" | "GameCorrected" | "GameTruncated";
   payload: Record<string, unknown>;
 }
 
@@ -109,6 +109,75 @@ export function applyMoveReceived(
         clock: input.clock,
         version,
       },
+    },
+  };
+}
+
+// Takebacks (ADR 0004). Broadcast PGNs get fixed after the fact: a wrong
+// move at ply N is replaced and everything after it disappears, or the
+// PGN simply gets shorter. Every stored ply after the first changed ply
+// was derived from the old line, so it must go.
+
+export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+export interface TruncateOutcome {
+  outcome: "truncated";
+  version: number;
+  // New last ply after the truncation; 0 means back to the start position.
+  toPly: number;
+  fen: string;
+  lastSan: string;
+  outbox: OutboxRow;
+}
+
+function lastLivePly(state: GameState): number {
+  let last = 0;
+  for (const [ply, move] of state.moves) {
+    if (!move.superseded && ply > last) last = ply;
+  }
+  return last;
+}
+
+// Decide whether the incoming PGN needs a truncation first, and to which
+// ply. Returns null when the normal per-ply path is enough.
+// - First ply whose SAN differs, with stored plies after it: truncate to
+//   that ply (the ply itself is then fixed by the normal correction path).
+// - Same moves but the PGN is shorter: truncate to the PGN's length.
+export function planTruncation(
+  state: GameState,
+  incoming: Array<{ ply: number; san: string }>,
+): number | null {
+  const stored = lastLivePly(state);
+  if (stored === 0) return null;
+  const byPly = new Map(incoming.map((m) => [m.ply, m.san]));
+  for (let ply = 1; ply <= Math.min(stored, incoming.length); ply++) {
+    const current = state.moves.get(ply);
+    if (current && byPly.get(ply) !== current.san) {
+      return stored > ply ? ply : null;
+    }
+  }
+  return incoming.length < stored ? incoming.length : null;
+}
+
+// Drop every ply after toPly and rewind the position to it. Version bumps
+// once, so clients see exactly one event for the whole truncation.
+export function applyTruncate(state: GameState, toPly: number): TruncateOutcome {
+  for (const ply of [...state.moves.keys()]) {
+    if (ply > toPly) state.moves.delete(ply);
+  }
+  const version = state.version + 1;
+  state.version = version;
+  const at = state.moves.get(toPly);
+  const fen = at?.fen ?? START_FEN;
+  return {
+    outcome: "truncated",
+    version,
+    toPly,
+    fen,
+    lastSan: at?.san ?? "",
+    outbox: {
+      eventType: "GameTruncated",
+      payload: { ply: toPly, fen, version },
     },
   };
 }

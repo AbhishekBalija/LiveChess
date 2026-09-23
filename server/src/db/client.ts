@@ -1,7 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import type { IngestOutcome } from "../ingestion/handler";
+import type { IngestOutcome, TruncateOutcome } from "../ingestion/handler";
 import type { CheckpointFields } from "../publisher/publisher";
 import { games, moves, outboxEvents } from "./schema";
 import * as schema from "./schema";
@@ -114,6 +114,45 @@ export async function persistIngestResultTx(
     // The publisher reads rows without joining moves, so the payload
     // carries the game identity plus the checkpoint snapshot it needs
     // for stream and cache keys.
+    payload: { gameId, ...result.outbox.payload, checkpoint },
+  });
+}
+
+// Takeback (ADR 0004): supersede every live ply after toPly and rewind
+// the checkpoint to it, in the caller's transaction. This is the one
+// place the checkpoint is allowed to move backwards.
+export async function persistTruncateTx(
+  tx: DbTx,
+  gameId: string,
+  result: TruncateOutcome,
+): Promise<void> {
+  await tx
+    .update(moves)
+    .set({ superseded: true })
+    .where(
+      and(
+        eq(moves.gameId, gameId),
+        gt(moves.ply, result.toPly),
+        eq(moves.superseded, false),
+      ),
+    );
+  await tx
+    .update(games)
+    .set({
+      version: result.version,
+      currentFen: result.fen,
+      lastPly: result.toPly,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(games.id, gameId));
+  const checkpoint: CheckpointFields = {
+    fen: result.fen,
+    lastPly: result.toPly,
+    lastSan: result.lastSan,
+    version: result.version,
+  };
+  await tx.insert(outboxEvents).values({
+    eventType: result.outbox.eventType,
     payload: { gameId, ...result.outbox.payload, checkpoint },
   });
 }
