@@ -28,6 +28,16 @@ export interface CacheFields extends Record<string, string> {
   lastSan: string;
 }
 
+// Board-position snapshot attached to every outbox payload by the
+// persistence layer. The cache mirrors the position, not the event:
+// an old-ply correction bumps Version but must not rewind fen/lastPly.
+export interface CheckpointFields {
+  fen: string;
+  lastPly: number;
+  lastSan: string;
+  version: number;
+}
+
 // Pure mapping: one outbox row becomes both Redis writes.
 // Both writes derive from the same row, which is the whole point:
 // a single poll cycle, a single reliability posture (ADR 0003).
@@ -45,15 +55,28 @@ export function buildWrites(row: {
     fen: str(row.payload["fen"]),
     version: str(row.payload["version"]),
   };
+  // Cache follows the checkpoint snapshot, never the event itself, so a
+  // correction to an older ply cannot rewind the cached board position.
+  // Rows written before the checkpoint existed fall back to the event.
+  const checkpoint = row.payload["checkpoint"] as CheckpointFields | undefined;
+  const cache: CacheFields =
+    checkpoint !== undefined && checkpoint !== null
+      ? {
+          fen: str(checkpoint.fen),
+          version: str(checkpoint.version),
+          lastPly: str(checkpoint.lastPly),
+          lastSan: str(checkpoint.lastSan),
+        }
+      : {
+          fen: stream.fen,
+          version: stream.version,
+          lastPly: stream.ply,
+          lastSan: stream.san,
+        };
   return {
     stream,
     cacheKey: cacheKey(gameId),
-    cache: {
-      fen: stream.fen,
-      version: stream.version,
-      lastPly: stream.ply,
-      lastSan: stream.san,
-    },
+    cache,
   };
 }
 

@@ -205,6 +205,25 @@ describe.runIf(URL)("postgres round-trip", () => {
       const corrected = rows.find((m) => m.ply === 1 && !m.superseded);
       expect(corrected?.san).toBe("d4");
       expect(corrected?.version).toBe(3);
+
+      // Every outbox payload carries the checkpoint snapshot the publisher
+      // copies to the cache. The old-ply correction must not rewind it.
+      const outbox = await db.select().from(outboxEvents);
+      const at = (version: number): Record<string, unknown> => {
+        const row = outbox.find(
+          (r) =>
+            (r.payload as { gameId?: string }).gameId === gid &&
+            (r.payload as { version?: number }).version === version,
+        );
+        if (!row) throw new Error(`missing outbox version ${version}`);
+        return row.payload as Record<string, unknown>;
+      };
+      expect(at(2)).toMatchObject({
+        checkpoint: { fen: "fen-2", lastPly: 2, lastSan: "e5", version: 2 },
+      });
+      expect(at(3)).toMatchObject({
+        checkpoint: { fen: "fen-2", lastPly: 2, lastSan: "e5", version: 3 },
+      });
     }
   });
 });

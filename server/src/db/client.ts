@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { IngestOutcome } from "../ingestion/handler";
+import type { CheckpointFields } from "../publisher/publisher";
 import { games, moves, outboxEvents } from "./schema";
 import * as schema from "./schema";
 
@@ -47,20 +48,18 @@ export async function persistIngestResult(
       source: result.move.source,
       version: result.version,
     });
-    await tx.insert(outboxEvents).values({
-      eventType: result.outbox.eventType,
-      // The publisher reads rows without joining moves, so the payload
-      // carries the game identity it needs for stream and cache keys.
-      payload: { gameId, ...result.outbox.payload },
-    });
     // Postgres stays authoritative for resync: the games checkpoint moves
-    // in the same transaction as the move row. Version always advances;
-    // the board position only advances, never rewinds on an old-ply fix.
+    // in the same transaction as the move row, BEFORE the outbox row, so
+    // the payload can carry the resulting snapshot. Version always
+    // advances; the board position only advances, never rewinds on an
+    // old-ply fix. The publisher copies that snapshot to the cache
+    // without any Postgres reads of its own.
     const [existing] = await tx
-      .select({ lastPly: games.lastPly })
+      .select({ lastPly: games.lastPly, currentFen: games.currentFen })
       .from(games)
       .where(eq(games.id, gameId));
-    if (existing && result.move.ply >= existing.lastPly) {
+    let checkpoint: CheckpointFields;
+    if (!existing || result.move.ply >= existing.lastPly) {
       await tx
         .update(games)
         .set({
@@ -69,11 +68,40 @@ export async function persistIngestResult(
           lastPly: result.move.ply,
         })
         .where(eq(games.id, gameId));
+      checkpoint = {
+        fen: result.move.fen,
+        lastPly: result.move.ply,
+        lastSan: result.move.san,
+        version: result.version,
+      };
     } else {
       await tx
         .update(games)
         .set({ version: result.version })
         .where(eq(games.id, gameId));
+      const [current] = await tx
+        .select({ san: moves.san })
+        .from(moves)
+        .where(
+          and(
+            eq(moves.gameId, gameId),
+            eq(moves.ply, existing.lastPly),
+            eq(moves.superseded, false),
+          ),
+        );
+      checkpoint = {
+        fen: existing.currentFen,
+        lastPly: existing.lastPly,
+        lastSan: current?.san ?? result.move.san,
+        version: result.version,
+      };
     }
+    await tx.insert(outboxEvents).values({
+      eventType: result.outbox.eventType,
+      // The publisher reads rows without joining moves, so the payload
+      // carries the game identity plus the checkpoint snapshot it needs
+      // for stream and cache keys.
+      payload: { gameId, ...result.outbox.payload, checkpoint },
+    });
   });
 }

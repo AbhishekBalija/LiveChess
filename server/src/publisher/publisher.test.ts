@@ -46,6 +46,24 @@ describe("publisher mapping", () => {
     expect(writes.stream.san).toBe("c5");
     expect(writes.cache.lastSan).toBe("c5");
   });
+
+  it("keeps the cache on the checkpoint for an old-ply correction", () => {
+    const writes = buildWrites({
+      eventType: "GameCorrected",
+      payload: {
+        gameId: "g-1",
+        ply: 1,
+        oldSan: "e4",
+        newSan: "d4",
+        fen: "fen-1b",
+        version: 3,
+        checkpoint: { fen: "fen-2", lastPly: 2, lastSan: "e5", version: 3 },
+      },
+    });
+    // Stream stays per-event; cache stays on the board position.
+    expect(writes.stream).toMatchObject({ ply: "1", san: "d4", fen: "fen-1b", version: "3" });
+    expect(writes.cache).toMatchObject({ fen: "fen-2", version: "3", lastPly: "2", lastSan: "e5" });
+  });
 });
 
 describe("seam 2 contract", () => {
