@@ -1,0 +1,1 @@
+CREATE INDEX "outbox_unpublished_idx" ON "outbox_events" USING btree ("id") WHERE "outbox_events"."published" = false;

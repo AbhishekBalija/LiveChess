@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyMoveReceived, applyTruncate, emptyGame, planTruncation, START_FEN } from "./handler";
 import {
   broadcastSlugs,
+  fensForSans,
   gameSourceId,
   parseBroadcastGame,
   parseMovetext,
@@ -200,5 +201,22 @@ describe("takebacks (ADR 0004)", () => {
     applyTruncate(state, 2);
     const fix = applyMoveReceived(state, { ply: 2, san: "c5", fen: "fen-2b", clock: null, source: "lichess" });
     expect(fix).toMatchObject({ outcome: "correction", version: 5 });
+  });
+});
+
+describe("illegal moves in a relayed PGN", () => {
+  it("keeps the legal plies before the first illegal one", () => {
+    // 3. Qxf7 is illegal (the queen is still on d1 after 1. e4 e5 2. Nf3 Nc6).
+    const pgn = `[Event "T"]
+[GameURL "https://lichess.org/broadcast/t/r/rrrrrrrr/iiiiiiii"]
+
+1. e4 e5 2. Nf3 Nc6 3. Qxf7 Kxf7 *`;
+    const game = parseBroadcastGame(pgn);
+    expect(game.plies.map((p) => p.san)).toEqual(["e4", "e5", "Nf3", "Nc6"]);
+    expect(game.plies[3]?.fen).toContain("r1bqkbnr/pppp1ppp/2n5");
+  });
+
+  it("stops fensForSans at the first illegal move", () => {
+    expect(fensForSans(["e4", "e5", "Ke3", "Nc6"])).toHaveLength(2);
   });
 });

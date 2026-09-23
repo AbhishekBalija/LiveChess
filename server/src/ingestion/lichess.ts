@@ -78,13 +78,25 @@ export function parseMovetext(movetext: string): Array<{
   return plies;
 }
 
+// FEN after each SAN, stopping at the first move that is not legal in the
+// position (a relay typo, a DGT glitch). The legal prefix is still worth
+// showing; the rest usually gets fixed by a later correction.
 export function fensForSans(sans: string[]): string[] {
   const chess = new Chess();
-  return sans.map((san) => {
-    chess.move(san);
-    return chess.fen();
-  });
+  const fens: string[] = [];
+  for (const san of sans) {
+    try {
+      chess.move(san);
+    } catch {
+      break;
+    }
+    fens.push(chess.fen());
+  }
+  return fens;
 }
+
+// Logged once per game and ply: the same bad PGN comes back on every poll.
+const reportedIllegal = new Set<string>();
 
 export function parseBroadcastGame(pgn: string): {
   headers: Record<string, string>;
@@ -101,9 +113,17 @@ export function parseBroadcastGame(pgn: string): {
   const movetext = lines.slice(i).join("\n");
   const moves = parseMovetext(movetext);
   const fens = fensForSans(moves.map((m) => m.san));
+  if (fens.length < moves.length) {
+    const bad = moves[fens.length];
+    const key = `${headers["GameURL"] ?? headers["Site"] ?? "?"}#${bad?.ply}`;
+    if (!reportedIllegal.has(key)) {
+      reportedIllegal.add(key);
+      console.warn(`illegal move ${bad?.san} at ply ${bad?.ply} in ${key.split("#")[0]}; keeping the ${fens.length} plies before it`);
+    }
+  }
   return {
     headers,
-    plies: moves.map((m, i) => ({ ...m, fen: fens[i] })),
+    plies: moves.slice(0, fens.length).map((m, i) => ({ ...m, fen: fens[i] as string })),
   };
 }
 

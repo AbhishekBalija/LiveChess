@@ -77,9 +77,16 @@ export const moves = pgTable(
 );
 
 // Monotonic bigserial id so the publisher polls in happened-order.
-export const outboxEvents = pgTable("outbox_events", {
-  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-  eventType: text("event_type").notNull(),
-  payload: jsonb("payload").notNull(),
-  published: boolean("published").notNull().default(false),
-});
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    eventType: text("event_type").notNull(),
+    payload: jsonb("payload").notNull(),
+    published: boolean("published").notNull().default(false),
+  },
+  // The publisher asks for the oldest unpublished rows every 500ms. Only a
+  // handful are ever unpublished while the table grows with every move,
+  // so index just those: the poll stays constant-time as history grows.
+  (t) => [index("outbox_unpublished_idx").on(t.id).where(sql`"outbox_events"."published" = false`)],
+);

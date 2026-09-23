@@ -1,16 +1,18 @@
 import { Redis } from "ioredis";
+import { envInt } from "../env";
 import { drizzleGamesDb, GamesHttpError, listGames, parseStatus } from "../api/games";
 import { UpcomingCache } from "../api/upcoming";
 import { nodeHttp } from "../ingestion/worker";
 import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
 import { db } from "../db/client";
 import { consumeOnce } from "./consumer";
+import { parseClientMessage } from "./messages";
 import { Router } from "./router";
 import { STREAM } from "../publisher/publisher";
 
 // Thin transport process. All routing decisions live in router.ts;
 // this only binds sockets to the router and the stream to the router.
-const PORT = Number(process.env["GATEWAY_PORT"] ?? 3001);
+const PORT = envInt("GATEWAY_PORT", 3001, { min: 1, max: 65535 });
 const CONSUMER = `gw-${process.pid}`;
 const redis = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379");
 const CLIENT_ORIGIN = process.env["CLIENT_ORIGIN"] ?? "http://localhost:5173";
@@ -168,8 +170,9 @@ Bun.serve({
       sockets.set(ws, ws);
     },
     message(ws, raw) {
-      const msg = JSON.parse(String(raw)) as { subscribe?: string };
-      if (msg.subscribe) router.subscribe(ws, msg.subscribe);
+      // Malformed frames are dropped, never thrown (see messages.ts).
+      const msg = parseClientMessage(raw);
+      if (msg) router.subscribe(ws, msg.subscribe);
     },
     close(ws) {
       router.unsubscribeAll(ws);
