@@ -1,0 +1,10 @@
+LiveChess
+Copyright 2026 Abhishek A N
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes the "Chessnut" chess piece set by Alexis Luengas
+(https://github.com/LexLuengas/chessnut-pieces), licensed under the
+Apache License, Version 2.0. See client/src/assets/pieces/.
+
+Live game data comes from the Lichess broadcast API (https://lichess.org/api).
