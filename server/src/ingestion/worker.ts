@@ -246,6 +246,17 @@ export interface TourCache {
   tournamentId: string | null;
 }
 
+// A game we already know keeps its tournament. Reusing it skips the
+// metadata request on every restart, and a flaky metadata request can no
+// longer fall back to a second tournament row for the same event.
+async function existingTournamentId(database: Db, sourceId: string): Promise<string | null> {
+  const [row] = await database
+    .select({ tournamentId: games.tournamentId })
+    .from(games)
+    .where(and(eq(games.source, "lichess"), eq(games.sourceId, sourceId)));
+  return row?.tournamentId ?? null;
+}
+
 // One game's full PGN: resolve the tournament once, upsert the game, run
 // every ply through the Move Handler. Shared by polling and streaming.
 // Returns null for a game we cannot use (unparseable, no source id).
@@ -267,6 +278,9 @@ export async function ingestPgnGame(
   if (!sourceId) {
     console.warn("skipping game without a GameURL or Site id");
     return null;
+  }
+  if (tourCache.tournamentId === null) {
+    tourCache.tournamentId = await existingTournamentId(database, sourceId);
   }
   if (tourCache.tournamentId === null) {
     const slugs = broadcastSlugs(game.headers);

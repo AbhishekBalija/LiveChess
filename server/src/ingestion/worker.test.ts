@@ -335,7 +335,7 @@ describe.runIf(URL)("worker integration", () => {
     await sql.end();
   });
 
-  it("fetches tournament metadata once across polls", async () => {
+  it("reuses a known game's tournament without fetching metadata", async () => {
     sql = postgres(URL as string);
     database = drizzle(sql, { schema });
     let metaCalls = 0;
@@ -348,10 +348,22 @@ describe.runIf(URL)("worker integration", () => {
     };
     const cache: TourCache = { tournamentId: null };
     await ingestRound(database, counting, "rrrrrrrr", cache);
-    expect(metaCalls).toBe(1);
-    expect(cache.tournamentId).not.toBeNull();
     await ingestRound(database, counting, "rrrrrrrr", cache);
-    expect(metaCalls).toBe(1);
+    expect(metaCalls).toBe(0);
+    expect(cache.tournamentId).toBe((await gameRow("aaaaaaaa")).tournamentId);
+  });
+
+  it("a failing metadata request never creates a second tournament for known games", async () => {
+    const before = await database.select({ id: tournaments.id }).from(tournaments);
+    const failing: HttpPort = {
+      get: async (url: string) => {
+        if (url.endsWith(".pgn")) return response(200, currentPgn);
+        throw new Error("ECONNRESET");
+      },
+    };
+    await ingestRound(database, failing, "rrrrrrrr", { tournamentId: null });
+    const after = await database.select({ id: tournaments.id }).from(tournaments);
+    expect(after).toHaveLength(before.length);
     await sql.end();
   });
 });
