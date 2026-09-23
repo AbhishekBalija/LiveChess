@@ -120,12 +120,20 @@ export async function upsertTournament(
   return row.id;
 }
 
+const RESULTS = new Set(["1-0", "0-1", "1/2-1/2"]);
+
+// Anything that is not a final score counts as in progress.
+export function normalizeResult(raw: string | undefined): string {
+  return raw && RESULTS.has(raw) ? raw : "*";
+}
+
 export async function upsertGame(
   database: Db | DbTx,
   tournamentId: string,
   sourceId: string,
   white: string,
   black: string,
+  result = "*",
 ): Promise<string> {
   const [row] = await database
     .insert(games)
@@ -136,10 +144,12 @@ export async function upsertGame(
       white,
       black,
       currentFen: "",
+      result,
     })
     .onConflictDoUpdate({
       target: [games.source, games.sourceId],
-      set: { white, black },
+      // Result flips from "*" to a score when the game ends.
+      set: { white, black, result },
     })
     .returning({ id: games.id });
   if (!row) throw new Error("game upsert returned no row");
@@ -257,6 +267,7 @@ export async function ingestRound(
       sourceId,
       game.headers["White"] ?? "?",
       game.headers["Black"] ?? "?",
+      normalizeResult(game.headers["Result"]),
     );
     const gameCounts = await ingestGame(database, gameId, game.plies);
     counts.games += 1;

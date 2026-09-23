@@ -23,3 +23,17 @@ export interface GameStateResponse {
   white?: string
   black?: string
 }
+
+// One row of GET /games (server/src/api/games.ts).
+export interface GameListItem {
+  id: string
+  white: string
+  black: string
+  result: string
+  tournament: { id: string; name: string }
+  lastPly: number
+  lastSan: string | null
+  fen: string
+  version: number
+  updatedAt: string
+}
