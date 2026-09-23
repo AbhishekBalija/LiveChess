@@ -1,0 +1,112 @@
+# LiveChess Roadmap
+
+This is the build plan. It turns the product roadmap in
+`live-chess-app-product-overview.md` (section 6) into slices, each one a
+GitHub milestone. A slice is a thin, end-to-end piece that is demoable on
+its own. Issues are filed per slice when the slice starts, not all up
+front.
+
+Terms follow `CONTEXT.md` (Ply, Version, Correction). Architecture
+decisions live in `docs/adr/`.
+
+## Order and why
+
+```mermaid
+flowchart LR
+  S1[Slice 1<br/>Live spine] --> S15[Slice 1.5<br/>Solid and deployed]
+  S15 --> S2[Slice 2<br/>Board feels alive]
+  S2 --> S3[Slice 3<br/>AI coverage]
+  S15 --> S4[Slice 4<br/>Beyond Lichess]
+  S4 --> S5[Slice 5<br/>Round out the app]
+  S3 --> S6[Slice 6<br/>Engagement]
+  S5 --> S6
+  S6 --> S7[Slice 7<br/>Grassroots]
+```
+
+- Hardening and deployment come right after the spine, so real people can
+  use it early and every later slice ships to a live URL.
+- Clocks and eval come before commentary, because commentary needs eval to
+  know what a blunder is.
+- Multi-source waits until the single-source experience is good, and it
+  starts with an ADR, because the hard part is duplicate games, not fetching.
+- Engagement features (alerts, polls) need accounts and notifications, so
+  they come after the app has enough content to be worth returning to.
+
+## Slice 1: Live spine (closing)
+
+Lichess broadcast ingestion, outbox, publisher, WebSocket gateway, resync,
+live board. Parent issue #1.
+
+- [x] Schema, adapter, Move Handler, outbox publisher, gateway, resync
+- [x] Client scaffold and live board wiring
+- [x] Lichess ingestion worker (Version loaded from Postgres)
+- [ ] Home live strip from real data (games list endpoint)
+- [ ] Walkthrough on a live round, close #1
+
+## Slice 1.5: Solid and deployed
+
+Nothing new for fans; make what exists trustworthy and public.
+
+- CI on every PR (typecheck, lint, test) and CHANGELOG.md
+- Takebacks: correction at ply N supersedes later plies (#12, ADR 0004)
+- Streaming ingestion (Lichess round stream) instead of 3s polling
+- Stale-feed indicator: "last update Xs ago", so the Live dot cannot lie
+  when the publisher or ingest is down
+- Fix the flaky publisher integration test (shared DB and stream)
+- One command to run everything locally
+- Deploy: hosted Postgres and Redis, the four server processes, the client,
+  environment files per stage, basic error tracking
+
+## Slice 2: The board feels alive
+
+- Clocks: show remaining time per side (already stored in `moves.clock`),
+  ticking locally for the side to move
+- Results and finished games: result badge, finished section, game over state
+- Eval: Stockfish job per new Version via BullMQ, eval stored per ply and
+  pushed through the outbox like moves
+- Win-probability bar from eval
+- Multi-board grid: watch a whole round at once
+
+## Slice 3: AI coverage
+
+- Move classifier from eval swings (blunder, mistake, tactical shot,
+  material swing, forced sequence)
+- AI commentary: short plain-language lines for classified moments, LLM
+  with per-game and global rate limits and cost caps
+- Auto recap when a game finishes
+
+## Slice 4: Coverage beyond Lichess
+
+- ADR 0005: cross-source game identity (match by event, round, board,
+  players; one primary source per game writes moves; others linked in a
+  `game_sources` table as fallback)
+- Generic PGN URL adapter (organizer live.pgn files)
+- DGT LiveChess Cloud adapter (unofficial feed, isolated behind its adapter)
+- Tournament pages: rounds, pairings, standings
+- Upcoming tournaments and fixtures
+
+## Slice 5: Round out the app
+
+- Players table and profiles
+- FIDE ratings from the official monthly download
+- News feed plus auto recaps from Slice 3
+
+## Slice 6: Engagement
+
+- Accounts (needed for anything personal)
+- Follow players and tournaments, notifications
+- Upset alerts, title-norm tracker
+- Fan predictions and polls per round
+
+## Slice 7: Grassroots
+
+- "Report this tournament live" tool for organizers and arbiters
+- chess-results.com adapter (pairings and results; scrape vs partnership
+  decision first)
+- Local tournament finder (city, rating category, entry fee)
+
+## Known deferred items
+
+Carried from the architecture spec, not scheduled until they are a real
+problem: Postgres-unavailable buffering, large concurrent-board spikes and
+load testing, Go rewrite of ingestion.
