@@ -33,3 +33,18 @@ Open http://localhost:5173, pick a game, and watch a ply land every 2s.
 a correction; the scripted line then ends once later moves stop fitting
 the corrected position (expected). Re-running `sim` on a finished game
 just reports it complete.
+
+## Real broadcast ingestion
+
+Instead of the simulator, point the worker at a Lichess broadcast round
+(round id from lichess.org/broadcast, 8 chars):
+
+```sh
+cd server && bun run ingest <broadcastRoundId>   # polls every INGEST_INTERVAL_MS (default 3000)
+```
+
+The worker upserts the tournament plus games and runs every ply through
+the Move Handler. Re-polls are no-ops and restarts continue Version from
+Postgres. Look up an ingested game id with
+`psql $DATABASE_URL -c "select id, white, black from games;"` and open
+http://localhost:5173/games/<id>.

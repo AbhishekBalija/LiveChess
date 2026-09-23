@@ -29,3 +29,14 @@ A full unique index on `(game_id, ply, source)` makes corrections impossible: th
 
 **Q: Duplicate vs correction, in one line each?**
 Same key plus same SAN is a no-op with nothing published. Same key plus different SAN bumps Version, emits `GameCorrected`, marks the old row superseded without deletion. History wins over the checkpoint.
+
+## Ingestion worker
+
+**Q: How does the worker survive restarts without reusing Versions?**
+It keeps no in-memory game state. Every poll opens one transaction per game, locks the row with `SELECT ... FOR UPDATE`, rebuilds the handler state from `games.version` plus live moves, then applies each ply. A restart just rebuilds from the same rows, so Versions continue and re-polls are all duplicate-noops.
+
+**Q: Why does the row lock matter if only one worker runs?**
+Without it, two overlapping polls (slow PGN fetch plus short interval) could read the same version and both insert version N+1, colliding on the identity index or forking Versions. `FOR UPDATE` serializes polls per game; the second waits, then sees the first poll's rows and no-ops.
+
+**Q: Why is real broadcast PGN harder to parse than it looks?**
+Move comments bundle `[%eval]` with `[%clk]`, SANs carry `?!` suffixes, and free-text notes appear. A naive tokenizer counts `[eval` and `Inaccuracy.` as plies. The fix walks words and brace blocks separately and reads `%clk` out of the blocks, so comment noise can never become a phantom ply. Proven against a 48-game Olympiad export: zero unparseable games.

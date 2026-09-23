@@ -10,7 +10,8 @@
     "publisher": "bun src/publisher/index.ts",
     "migrate": "drizzle-kit migrate",
     "seed": "bun scripts/seed.ts",
-    "sim": "bun scripts/sim.ts"
+    "sim": "bun scripts/sim.ts",
+    "ingest": "bun src/ingestion/worker.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",
