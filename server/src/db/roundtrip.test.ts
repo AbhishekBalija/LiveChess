@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -50,6 +51,7 @@ describe.runIf(URL)("postgres round-trip", () => {
       san: "e4",
       fen: "fen-1",
       source: "lichess",
+      version: 1,
     });
     const err = await db
       .insert(moves)
@@ -59,6 +61,7 @@ describe.runIf(URL)("postgres round-trip", () => {
         san: "e4",
         fen: "fen-1",
         source: "lichess",
+        version: 1,
       })
       .then(
         () => null,
@@ -124,5 +127,84 @@ describe.runIf(URL)("postgres round-trip", () => {
     expect(atFive.filter((m) => m.superseded)).toHaveLength(1);
     // Unrelated plies untouched by the correction.
     expect(stored.filter((m) => m.ply === 3 && m.superseded)).toHaveLength(0);
+  });
+
+  it("keeps the games checkpoint authoritative with move versions", async () => {
+    const [t] = await db
+      .insert(tournaments)
+      .values({
+        source: "lichess",
+        sourceId: `tour-checkpoint-${Date.now()}`,
+        name: "Checkpoint Test",
+      })
+      .returning({ id: tournaments.id });
+    const [g] = await db
+      .insert(games)
+      .values({
+        tournamentId: t.id,
+        source: "lichess",
+        sourceId: `game-checkpoint-${Date.now()}`,
+        white: "A",
+        black: "B",
+        currentFen: "",
+      })
+      .returning({ id: games.id });
+    const gid = g.id;
+    {
+      const state = emptyGame();
+      const r1 = applyMoveReceived(state, {
+        ply: 1,
+        san: "e4",
+        fen: "fen-1",
+        clock: null,
+        source: "lichess",
+      });
+      if (r1.outcome === "duplicate-noop") throw new Error("unexpected noop");
+      await persistIngestResult(db, gid, r1);
+      const r2 = applyMoveReceived(state, {
+        ply: 2,
+        san: "e5",
+        fen: "fen-2",
+        clock: null,
+        source: "lichess",
+      });
+      if (r2.outcome === "duplicate-noop") throw new Error("unexpected noop");
+      await persistIngestResult(db, gid, r2);
+
+      const [checkpoint] = await db
+        .select()
+        .from(games)
+        .where(eq(games.id, gid));
+      expect(checkpoint?.version).toBe(2);
+      expect(checkpoint?.currentFen).toBe("fen-2");
+      expect(checkpoint?.lastPly).toBe(2);
+      const live = await db.select().from(moves).where(eq(moves.gameId, gid));
+      expect(
+        live
+          .filter((m) => !m.superseded)
+          .map((m) => m.version)
+          .sort((a, b) => a - b),
+      ).toEqual([1, 2]);
+
+      const fix = applyMoveReceived(state, {
+        ply: 1,
+        san: "d4",
+        fen: "fen-1b",
+        clock: null,
+        source: "lichess",
+      });
+      if (fix.outcome !== "correction") throw new Error("expected correction");
+      await persistIngestResult(db, gid, fix);
+
+      const [afterFix] = await db.select().from(games).where(eq(games.id, gid));
+      expect(afterFix?.version).toBe(3);
+      // Old-ply correction bumps Version but must not rewind the position.
+      expect(afterFix?.currentFen).toBe("fen-2");
+      expect(afterFix?.lastPly).toBe(2);
+      const rows = await db.select().from(moves).where(eq(moves.gameId, gid));
+      const corrected = rows.find((m) => m.ply === 1 && !m.superseded);
+      expect(corrected?.san).toBe("d4");
+      expect(corrected?.version).toBe(3);
+    }
   });
 });

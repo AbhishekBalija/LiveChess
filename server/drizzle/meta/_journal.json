@@ -15,6 +15,13 @@
       "when": 1790105007302,
       "tag": "0001_thin_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790161736070,
+      "tag": "0002_lowly_shard",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { IngestOutcome } from "../ingestion/handler";
-import { moves, outboxEvents } from "./schema";
+import { games, moves, outboxEvents } from "./schema";
 import * as schema from "./schema";
 
 export type Db = PostgresJsDatabase<typeof schema>;
@@ -45,6 +45,7 @@ export async function persistIngestResult(
       clock: result.move.clock,
       superseded: false,
       source: result.move.source,
+      version: result.version,
     });
     await tx.insert(outboxEvents).values({
       eventType: result.outbox.eventType,
@@ -52,5 +53,27 @@ export async function persistIngestResult(
       // carries the game identity it needs for stream and cache keys.
       payload: { gameId, ...result.outbox.payload },
     });
+    // Postgres stays authoritative for resync: the games checkpoint moves
+    // in the same transaction as the move row. Version always advances;
+    // the board position only advances, never rewinds on an old-ply fix.
+    const [existing] = await tx
+      .select({ lastPly: games.lastPly })
+      .from(games)
+      .where(eq(games.id, gameId));
+    if (existing && result.move.ply >= existing.lastPly) {
+      await tx
+        .update(games)
+        .set({
+          version: result.version,
+          currentFen: result.move.fen,
+          lastPly: result.move.ply,
+        })
+        .where(eq(games.id, gameId));
+    } else {
+      await tx
+        .update(games)
+        .set({ version: result.version })
+        .where(eq(games.id, gameId));
+    }
   });
 }

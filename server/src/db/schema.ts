@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -53,6 +54,9 @@ export const moves = pgTable(
     clock: text("clock"),
     superseded: boolean("superseded").notNull().default(false),
     source: text("source").notNull(),
+    // Version at insert time. Corrections bump Version without a new Ply,
+    // so ordering by ply alone cannot answer "moves since version X".
+    version: integer("version").notNull(),
   },
   // One live row per identity key. Superseded history rows are exempt,
   // otherwise a correction could never coexist with the row it replaces.
@@ -60,6 +64,7 @@ export const moves = pgTable(
     uniqueIndex("moves_identity_idx")
       .on(t.gameId, t.ply, t.source)
       .where(sql`"moves"."superseded" = false`),
+    index("moves_game_version_idx").on(t.gameId, t.version),
   ],
 );
 
