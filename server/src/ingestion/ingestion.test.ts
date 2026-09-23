@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { applyMoveReceived, emptyGame } from "./handler";
-import { parseBroadcastGame, parseMovetext } from "./lichess";
+import {
+  broadcastSlugs,
+  gameSourceId,
+  parseBroadcastGame,
+  parseMovetext,
+  splitPgnGames,
+} from "./lichess";
 
 const SAMPLE = `[White "Carlsen, Magnus"]
 [Black "Nepomniachtchi, Ian"]
@@ -24,6 +30,49 @@ describe("lichess broadcast parsing", () => {
     expect(plies[0].clock).toBe("0:03:00");
     expect(plies[1].clock).toBeNull();
     expect(plies[2].clock).toBeNull();
+  });
+
+  it("ignores eval noise and NAG suffixes without phantom plies", () => {
+    const plies = parseMovetext(
+      "1. e4 { [%eval 0.1] [%clk 1:30:47] } 1... Nf6 { [%eval 0.18] } 2. e5?! { Inaccuracy. d4 was best. } { [%clk 1:25:01] } *",
+    );
+    expect(plies.map((p) => p.san)).toEqual(["e4", "Nf6", "e5"]);
+    expect(plies.map((p) => p.ply)).toEqual([1, 2, 3]);
+    expect(plies[0].clock).toBe("1:30:47");
+    expect(plies[1].clock).toBeNull();
+    expect(plies[2].clock).toBe("1:25:01");
+  });
+
+  it("splits a round export into games and reads their headers", () => {
+    const pgn = `[Event "Test Open"]
+[Site "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr/aaaaaaaa"]
+[White "A"]
+[Black "B"]
+[GameURL "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr/aaaaaaaa"]
+[BroadcastURL "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr"]
+
+1. e4 e5 *
+
+[Event "Test Open"]
+[Site "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr/bbbbbbbb"]
+[White "C"]
+[Black "D"]
+[GameURL "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr/bbbbbbbb"]
+[BroadcastURL "https://lichess.org/broadcast/test-open/round-1/rrrrrrrr"]
+
+1. d4 d5 *`;
+    const parts = splitPgnGames(pgn);
+    expect(parts).toHaveLength(2);
+    const first = parseBroadcastGame(parts[0] ?? "");
+    expect(gameSourceId(first.headers)).toBe("aaaaaaaa");
+    expect(first.headers["White"]).toBe("A");
+    expect(first.plies.map((p) => p.san)).toEqual(["e4", "e5"]);
+    expect(broadcastSlugs(first.headers)).toEqual({
+      tourSlug: "test-open",
+      roundSlug: "round-1",
+    });
+    expect(gameSourceId({})).toBeNull();
+    expect(broadcastSlugs({})).toBeNull();
   });
 
   it("parses headers and computes a FEN per ply", () => {
