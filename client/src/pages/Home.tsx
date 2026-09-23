@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
+import { useNow } from "@/lib/clock"
 import { splitTournamentName, surname } from "@/lib/names"
 import { formatMove, sideToMove } from "@/lib/ply"
 import { useLiveGames } from "@/lib/useLiveGames"
@@ -71,6 +72,7 @@ export function Home() {
 }
 
 function LiveGames({ games }: { games: GameListItem[] | null }) {
+  const now = useNow()
   if (games === null) {
     return (
       <Strip>
@@ -92,7 +94,7 @@ function LiveGames({ games }: { games: GameListItem[] | null }) {
     <>
       <Strip>
         {games.map((g) => (
-          <MatchCard key={g.id} game={g} className="w-[300px] shrink-0 snap-start md:w-[330px]" />
+          <MatchCard key={g.id} game={g} now={now} className="w-[300px] shrink-0 snap-start md:w-[330px]" />
         ))}
       </Strip>
       {featured && <Featured game={featured} />}

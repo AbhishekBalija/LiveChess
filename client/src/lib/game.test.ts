@@ -112,7 +112,7 @@ describe("applyEvent", () => {
   }
 
   it("keeps White and Black at the same move number as distinct plies", () => {
-    let state: GameState = { version: 0, fen: "", lastPly: 0, moves: new Map() }
+    let state: GameState = { version: 0, fen: "", lastPly: 0, moves: new Map(), lastMoveAt: null }
     for (const ev of [event({ ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 }), event({ ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 })]) {
       const out = applyEvent(state, ev)
       if (!("state" in out)) throw new Error("unexpected gap")

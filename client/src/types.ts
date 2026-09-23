@@ -24,6 +24,9 @@ export interface GameStateResponse {
   white?: string
   black?: string
   tournament?: string
+  // Postgres path only: "*" while in progress, and when the last change landed.
+  result?: string
+  updatedAt?: string
 }
 
 // One row of GET /games (server/src/api/games.ts).

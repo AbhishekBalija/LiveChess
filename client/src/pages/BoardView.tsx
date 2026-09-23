@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
+import { runningClock, useNow } from "@/lib/clock"
 import { changedSquares, START_FEN } from "@/lib/fen"
 import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
 import { splitTournamentName } from "@/lib/names"
@@ -22,6 +23,7 @@ export function BoardView() {
   const { id = "" } = useParams()
   const { state, status, notFound } = useLiveGame(id)
   const updatedAgo = useUpdatedAgo(state?.version)
+  const now = useNow()
   const palette = paletteFor(id)
 
   if (notFound || !id) {
@@ -60,7 +62,13 @@ export function BoardView() {
   const lastMove = state.moves.get(state.lastPly) ?? null
   const prevFen = state.lastPly > 1 ? state.moves.get(state.lastPly - 1)?.fen : START_FEN
   const highlight = lastMove && prevFen ? changedSquares(prevFen, state.fen) : undefined
-  const clocks = clocksOf(state)
+  // Only the side to move's clock runs, and only while the game is on.
+  const running = status === "live" && (state.result ?? "*") === "*" && state.lastPly > 0
+  const lastClocks = clocksOf(state)
+  const clocks = {
+    white: runningClock(lastClocks.white, running && toMove === "white", state.lastMoveAt, now),
+    black: runningClock(lastClocks.black, running && toMove === "black", state.lastMoveAt, now),
+  }
   const white = state.white ?? "White"
   const black = state.black ?? "Black"
   const statusText = lastMove

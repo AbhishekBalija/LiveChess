@@ -1,5 +1,6 @@
 import { Link } from "react-router"
 import { ChevronRight } from "lucide-react"
+import { runningClock } from "@/lib/clock"
 import { formatMove, sideToMove, type Side } from "@/lib/ply"
 import { resultLine, splitTournamentName } from "@/lib/names"
 import type { GameListItem } from "@/types"
@@ -8,10 +9,14 @@ import type { GameListItem } from "@/types"
 // both players with their clocks, and one colored status line. Lime is
 // the side to move and live moves, green is a result.
 
-export function MatchCard({ game, className = "" }: { game: GameListItem; className?: string }) {
+// `now` makes the side to move's clock run between polls (home ticks it).
+export function MatchCard({ game, now, className = "" }: { game: GameListItem; now?: number; className?: string }) {
   const { title, subtitle } = splitTournamentName(game.tournament.name)
   const live = game.result === "*"
   const toMove: Side | null = live && game.lastPly > 0 ? sideToMove(game.lastPly + 1) : null
+  const since = Date.parse(game.updatedAt)
+  const clock = (value: string | null, side: Side) =>
+    runningClock(value, now !== undefined && toMove === side, Number.isNaN(since) ? null : since, now ?? 0)
   return (
     <Link
       to={`/games/${game.id}`}
@@ -23,8 +28,8 @@ export function MatchCard({ game, className = "" }: { game: GameListItem; classN
       </div>
       <div className="flex flex-col gap-3 px-4 pt-3.5 pb-4">
         {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
-        <PlayerRow side="white" name={game.white} clock={game.whiteClock} active={toMove === "white"} />
-        <PlayerRow side="black" name={game.black} clock={game.blackClock} active={toMove === "black"} />
+        <PlayerRow side="white" name={game.white} clock={clock(game.whiteClock, "white")} active={toMove === "white"} />
+        <PlayerRow side="black" name={game.black} clock={clock(game.blackClock, "black")} active={toMove === "black"} />
         {live ? (
           <span className="text-[13px] font-bold text-primary">
             Live{game.lastSan ? ` · ${formatMove(game.lastPly, game.lastSan)}` : " · not started"}

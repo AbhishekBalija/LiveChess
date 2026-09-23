@@ -17,6 +17,8 @@ export interface GameCheckpoint {
   white?: string;
   black?: string;
   tournament?: string;
+  result?: string;
+  updatedAt?: string;
 }
 
 export interface LiveMoveRow {
@@ -57,6 +59,8 @@ export interface GameStateResponse {
   white?: string;
   black?: string;
   tournament?: string;
+  result?: string;
+  updatedAt?: string;
 }
 
 export class StateHttpError extends Error {
@@ -95,11 +99,13 @@ export function drizzleStateDb(database: Db): StateDbPort {
           white: games.white,
           black: games.black,
           tournament: tournaments.name,
+          result: games.result,
+          updatedAt: games.updatedAt,
         })
         .from(games)
         .innerJoin(tournaments, eq(tournaments.id, games.tournamentId))
         .where(eq(games.id, gameId));
-      return row ?? null;
+      return row ? { ...row, updatedAt: row.updatedAt.toISOString() } : null;
     },
     async findLiveMove(gameId, ply) {
       const [row] = await database
@@ -190,5 +196,9 @@ export async function getGameState(
     white: game.white,
     black: game.black,
     tournament: game.tournament,
+    // When the last change was stored; clients tick the side to move's
+    // clock from here.
+    result: game.result,
+    updatedAt: game.updatedAt,
   };
 }
