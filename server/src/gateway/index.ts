@@ -1,4 +1,6 @@
 import { Redis } from "ioredis";
+import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
+import { db } from "../db/client";
 import { consumeOnce } from "./consumer";
 import { Router } from "./router";
 import { STREAM } from "../publisher/publisher";
@@ -8,6 +10,56 @@ import { STREAM } from "../publisher/publisher";
 const PORT = Number(process.env["GATEWAY_PORT"] ?? 3001);
 const CONSUMER = `gw-${process.pid}`;
 const redis = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379");
+const CLIENT_ORIGIN = process.env["CLIENT_ORIGIN"] ?? "http://localhost:5173";
+
+function corsHeaders(): Record<string, string> {
+  return { "Access-Control-Allow-Origin": CLIENT_ORIGIN };
+}
+
+const STATE_ROUTE = /^\/games\/([^/]+)\/state$/;
+
+// Resync wiring only. All snapshot-vs-cache decisions live in state.ts;
+// this parses the path plus query, maps StateHttpError to status, and
+// returns JSON. Read-only: HGETALL plus Postgres reads, never a write.
+async function handleStateGet(req: Request): Promise<Response | null> {
+  const url = new URL(req.url);
+  const match = STATE_ROUTE.exec(url.pathname);
+  if (!match) return null;
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(),
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
+  if (req.method !== "GET") return null;
+  try {
+    const gameId = decodeURIComponent(match[1] ?? "");
+    if (!gameId) throw new StateHttpError(404, "game not found");
+    const sinceVersion = parseSinceVersion(url.searchParams.get("since_version"));
+    const state = await getGameState(
+      drizzleStateDb(db()),
+      {
+        hgetall: async (key) => {
+          const hash = await redis.hgetall(key);
+          return Object.keys(hash).length > 0 ? hash : null;
+        },
+      },
+      gameId,
+      sinceVersion,
+    );
+    return Response.json(state, { headers: corsHeaders() });
+  } catch (err) {
+    if (err instanceof StateHttpError) {
+      return Response.json({ error: err.message }, { status: err.status, headers: corsHeaders() });
+    }
+    console.error("resync failed", err);
+    return Response.json({ error: "internal error" }, { status: 500, headers: corsHeaders() });
+  }
+}
 
 const router = new Router();
 const sockets = new Map<object, { send(message: string): void }>();
@@ -62,7 +114,9 @@ void pump();
 
 Bun.serve({
   port: PORT,
-  fetch(req, server) {
+  async fetch(req, server) {
+    const state = await handleStateGet(req);
+    if (state) return state;
     if (server.upgrade(req)) return;
     return new Response("livechess gateway", { status: 200 });
   },
