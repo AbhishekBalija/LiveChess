@@ -38,6 +38,9 @@ export const games = pgTable(
     version: integer("version").notNull().default(0),
     currentFen: text("current_fen").notNull().default(""),
     lastPly: integer("last_ply").notNull().default(0),
+    // Lichess broadcast round this game was ingested from, so a round that
+    // stopped being followed before it ended can be finished off later.
+    roundSourceId: text("round_source_id"),
     // PGN Result header: "*" while the game is in progress, else the score.
     result: text("result").notNull().default("*"),
     // Bumped with every checkpoint change, so lists can show latest activity first.

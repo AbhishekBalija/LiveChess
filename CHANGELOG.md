@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Broadcast supervisor (#28): follows live Lichess rounds on its own
+  (streams what the limit allows, polls the rest), gives every round a final
+  pull when it ends, and finishes off rounds left with unfinished games.
+  `bun run dev` now starts it.
+- Games store their Lichess round id.
 - Matchday design system (#19): navy, lime and gold tokens, Barlow
   Condensed / Manrope / JetBrains Mono, app shell with a desktop top bar
   and a phone bottom nav, Chessnut SVG pieces (Apache-2.0).

@@ -15,6 +15,7 @@ import {
   type HttpPort,
   type HttpResponse,
   type TourCache,
+  checkLichessToken,
   normalizeResult,
   roundFinished,
   runStreamWorker,
@@ -432,5 +433,26 @@ describe("roundFinished", () => {
     expect(roundFinished(new Map())).toBe(false);
     expect(roundFinished(new Map([["a", "1-0"], ["b", "*"]]))).toBe(false);
     expect(roundFinished(new Map([["a", "1-0"], ["b", "0-1"]]))).toBe(true);
+  });
+});
+
+describe("checkLichessToken", () => {
+  const withStatus = (status: number, body: unknown = {}): HttpPort => ({
+    get: async (url) => {
+      expect(url).toBe("https://lichess.org/api/account");
+      return response(status, JSON.stringify(body));
+    },
+  });
+
+  it("returns the account name for a working token", async () => {
+    expect(await checkLichessToken(withStatus(200, { username: "abhishek" }), "lip_x")).toBe("abhishek");
+  });
+
+  it("fails loudly on a rejected token", async () => {
+    await expect(checkLichessToken(withStatus(401), "lip_bad")).rejects.toThrow(/rejected/);
+  });
+
+  it("skips the check without a token", async () => {
+    expect(await checkLichessToken(withStatus(500), undefined)).toBeNull();
   });
 });

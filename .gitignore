@@ -7,3 +7,6 @@ build/
 .env.production
 *.local
 .DS_Store
+
+# Local copy of the Lichess OpenAPI spec (reference only, 1.6 MB)
+docs/Lichess API*.json

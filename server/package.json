@@ -11,7 +11,8 @@
     "migrate": "drizzle-kit migrate",
     "seed": "bun scripts/seed.ts",
     "sim": "bun scripts/sim.ts",
-    "ingest": "bun src/ingestion/worker.ts"
+    "ingest": "bun src/ingestion/worker.ts",
+    "supervisor": "bun src/ingestion/supervisor.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",
