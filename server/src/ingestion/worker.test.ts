@@ -14,6 +14,7 @@ import {
   roundPgnUrl,
   type HttpPort,
   type HttpResponse,
+  type TourCache,
 } from "./worker";
 
 function response(
@@ -105,6 +106,26 @@ describe("worker http", () => {
       (e: unknown) => e as RateLimitedError,
     );
     expect(err?.retryAfterMs).toBe(60000);
+  });
+
+  it("sends per-request Accept headers", async () => {
+    const seen: Array<{ url: string; accept: string | undefined }> = [];
+    const http: HttpPort = {
+      get: async (url: string, accept?: string) => {
+        seen.push({ url, accept });
+        if (url.endsWith(".pgn")) return response(200, PGN);
+        return response(200, META);
+      },
+    };
+    await fetchRoundPgn(http, "rrrrrrrr");
+    await fetchTourInfo(http, "test-open", "round-1", "rrrrrrrr", "Test Open");
+    expect(seen).toEqual([
+      { url: roundPgnUrl("rrrrrrrr"), accept: "application/x-chess-pgn" },
+      {
+        url: roundMetaUrl("test-open", "round-1", "rrrrrrrr"),
+        accept: "application/json",
+      },
+    ]);
   });
 
   it("throws on non-2xx and propagates network errors", async () => {
@@ -256,6 +277,26 @@ describe.runIf(URL)("worker integration", () => {
     expect(atThree.find((r) => !r.superseded)?.san).toBe("Bc4");
     const after = await scopedCounts();
     expect(after.outbox - before.outbox).toBe(1);
+    await sql.end();
+  });
+
+  it("fetches tournament metadata once across polls", async () => {
+    sql = postgres(URL as string);
+    database = drizzle(sql, { schema });
+    let metaCalls = 0;
+    const counting: HttpPort = {
+      get: async (url: string) => {
+        if (url.endsWith(".pgn")) return response(200, currentPgn);
+        metaCalls += 1;
+        return response(200, META);
+      },
+    };
+    const cache: TourCache = { tournamentId: null };
+    await ingestRound(database, counting, "rrrrrrrr", cache);
+    expect(metaCalls).toBe(1);
+    expect(cache.tournamentId).not.toBeNull();
+    await ingestRound(database, counting, "rrrrrrrr", cache);
+    expect(metaCalls).toBe(1);
     await sql.end();
   });
 });

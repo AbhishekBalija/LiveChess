@@ -39,7 +39,7 @@ export interface HttpResponse {
 }
 
 export interface HttpPort {
-  get(url: string): Promise<HttpResponse>;
+  get(url: string, accept?: string): Promise<HttpResponse>;
 }
 
 export class RateLimitedError extends Error {
@@ -62,7 +62,7 @@ function retryAfterMs(headers: HttpHeaders): number {
 }
 
 export async function fetchRoundPgn(http: HttpPort, roundId: string): Promise<string> {
-  const res = await http.get(roundPgnUrl(roundId));
+  const res = await http.get(roundPgnUrl(roundId), "application/x-chess-pgn");
   if (res.status === 429) throw new RateLimitedError(retryAfterMs(res.headers));
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`round PGN export failed with ${res.status}`);
@@ -86,7 +86,10 @@ export async function fetchTourInfo(
   eventName: string,
 ): Promise<TourInfo> {
   try {
-    const res = await http.get(roundMetaUrl(tourSlug, roundSlug, roundId));
+    const res = await http.get(
+      roundMetaUrl(tourSlug, roundSlug, roundId),
+      "application/json",
+    );
     if (!res.ok) throw new Error(`metadata failed with ${res.status}`);
     const body = (await res.json()) as {
       tour?: { id?: unknown; name?: unknown };
@@ -209,15 +212,23 @@ export interface PollCounts extends GameCounts {
   games: number;
 }
 
+// Resolved tournament id, held for one worker run and reused across
+// polls. The first resolution wins, real or fallback, so a later
+// metadata failure can never create a second tournament row.
+export interface TourCache {
+  tournamentId: string | null;
+}
+
 export async function ingestRound(
   database: Db,
   http: HttpPort,
   roundId: string,
+  tourCache?: TourCache,
 ): Promise<PollCounts> {
   const pgn = await fetchRoundPgn(http, roundId);
   const parts = splitPgnGames(pgn);
   const counts: PollCounts = { games: 0, inserted: 0, corrections: 0, noops: 0 };
-  let tournamentId: string | null = null;
+  let tournamentId = tourCache?.tournamentId ?? null;
   for (const part of parts) {
     let game: ReturnType<typeof parseBroadcastGame>;
     try {
@@ -238,6 +249,7 @@ export async function ingestRound(
         ? await fetchTourInfo(http, slugs.tourSlug, slugs.roundSlug, roundId, eventName)
         : { sourceId: `round-${roundId}`, name: eventName };
       tournamentId = await upsertTournament(database, tour.sourceId, tour.name);
+      if (tourCache) tourCache.tournamentId = tournamentId;
     }
     const gameId = await upsertGame(
       database,
@@ -264,9 +276,10 @@ export async function runWorker(
   roundId: string,
   intervalMs: number,
 ): Promise<never> {
+  const tourCache: TourCache = { tournamentId: null };
   for (;;) {
     try {
-      const counts = await ingestRound(database, http, roundId);
+      const counts = await ingestRound(database, http, roundId, tourCache);
       console.log(
         `ingest ${roundId}: ${counts.games} games, +${counts.inserted} moves, ~${counts.corrections} corrections`,
       );
@@ -283,9 +296,9 @@ export async function runWorker(
 }
 
 const nodeHttp: HttpPort = {
-  async get(url: string): Promise<HttpResponse> {
+  async get(url: string, accept = "application/json"): Promise<HttpResponse> {
     const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/x-chess-pgn" },
+      headers: { "User-Agent": USER_AGENT, Accept: accept },
     });
     return {
       status: res.status,
