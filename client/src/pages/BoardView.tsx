@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Link, useParams } from "react-router"
 import { ChevronLeft } from "lucide-react"
 import { AppShell } from "@/components/AppShell"
@@ -22,7 +22,6 @@ import { useLiveGame, type ConnectionStatus } from "@/lib/useLiveGame"
 export function BoardView() {
   const { id = "" } = useParams()
   const { state, status, notFound } = useLiveGame(id)
-  const updatedAgo = useUpdatedAgo(state?.version)
   const now = useNow()
   const palette = paletteFor(id)
 
@@ -62,6 +61,7 @@ export function BoardView() {
   const lastMove = state.moves.get(state.lastPly) ?? null
   const prevFen = state.lastPly > 1 ? state.moves.get(state.lastPly - 1)?.fen : START_FEN
   const highlight = lastMove && prevFen ? changedSquares(prevFen, state.fen) : undefined
+  const lastMoveAgo = state.lastMoveAt !== null && state.lastPly > 0 ? timeAgo(now - state.lastMoveAt) : null
   // Only the side to move's clock runs, and only while the game is on.
   const running = status === "live" && (state.result ?? "*") === "*" && state.lastPly > 0
   const lastClocks = clocksOf(state)
@@ -92,7 +92,7 @@ export function BoardView() {
         >
           <ScoreSide side="white" name={white} clock={clocks.white} active={toMove === "white"} />
           <div className="flex flex-col items-center gap-2 text-center">
-            <LiveBadge status={status} updatedAgo={updatedAgo} />
+            <LiveBadge status={status} lastMoveAgo={lastMoveAgo} />
             <span className="text-xl font-bold text-gold lg:text-[26px]">{statusText}</span>
           </div>
           <ScoreSide side="black" name={black} clock={clocks.black} active={toMove === "black"} align="right" />
@@ -119,32 +119,22 @@ export function BoardView() {
   )
 }
 
-// "Updated 5s ago" since the last change we received (stale-feed hint):
-// the Live dot alone cannot tell a quiet position from a stalled feed.
-function useUpdatedAgo(version: number | undefined): string | null {
-  const [lastChange, setLastChange] = useState<number | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (version !== undefined) setLastChange(Date.now())
-  }, [version])
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5000)
-    return () => clearInterval(timer)
-  }, [])
-  if (lastChange === null) return null
-  const seconds = Math.max(0, Math.round((now - lastChange) / 1000))
+// "just now", "40s ago", "3m ago". Next to "Live" it reads as "connected,
+// and this is how long the player on move has been thinking".
+function timeAgo(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
   if (seconds < 10) return "just now"
   if (seconds < 60) return `${seconds}s ago`
-  return `${Math.round(seconds / 60)}m ago`
+  return `${Math.floor(seconds / 60)}m ago`
 }
 
-function LiveBadge({ status, updatedAgo }: { status: ConnectionStatus; updatedAgo?: string | null }) {
+function LiveBadge({ status, lastMoveAgo }: { status: ConnectionStatus; lastMoveAgo?: string | null }) {
   const live = status === "live"
   return (
     <span role="status" className="flex items-center gap-1.5 text-[13px] font-bold">
       <span aria-hidden className={`size-2 rounded-full ${live ? "bg-live" : "animate-pulse bg-gold"}`} />
       {live ? "Live" : status === "loading" ? "Connecting..." : "Reconnecting..."}
-      {live && updatedAgo && <span className="font-medium text-muted-foreground">· updated {updatedAgo}</span>}
+      {live && lastMoveAgo && <span className="font-medium text-muted-foreground">· last move {lastMoveAgo}</span>}
     </span>
   )
 }
