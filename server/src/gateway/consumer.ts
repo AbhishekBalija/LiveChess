@@ -8,6 +8,8 @@ export interface StreamPort {
     Array<{ id: string; fields: Record<string, string> }>
   >;
   ack(stream: string, group: string, id: string): Promise<unknown>;
+  // XGROUP CREATE ... $ MKSTREAM; must not fail if the group already exists.
+  createGroup(stream: string, group: string): Promise<unknown>;
 }
 
 export const GROUP = "gateway";
@@ -37,7 +39,17 @@ export async function consumeOnce(
   consumer: string,
   send: (conn: object, message: string) => void,
 ): Promise<number> {
-  const entries = await stream.readGroup(GROUP, consumer, STREAM);
+  let entries: Awaited<ReturnType<StreamPort["readGroup"]>>;
+  try {
+    entries = await stream.readGroup(GROUP, consumer, STREAM);
+  } catch (err) {
+    // Redis came back without its data (restart without persistence,
+    // flush, eviction), so the group is gone (#65). Re-create it from
+    // "now"; clients close any gap with resync.
+    if (!String(err).includes("NOGROUP")) throw err;
+    await stream.createGroup(STREAM, GROUP);
+    return 0;
+  }
   for (const entry of entries) {
     router.fanout(entryToEvent(entry.fields), send);
     await stream.ack(STREAM, GROUP, entry.id);

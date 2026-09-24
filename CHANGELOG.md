@@ -32,6 +32,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Lichess tier and FIDE time control class (migration 0007).
 
 ### Fixed
+- Gateway recovers when Redis comes back without its data (#65). Its
+  consumer group was only created at startup, so after a Redis restart
+  without persistence every read failed with NOGROUP and no live moves
+  reached viewers until the gateway was restarted. It now re-creates the
+  group and carries on.
 - Eval bar no longer jumps to the middle after every move. A new move
   has no eval for a second or so; the board page and home cards now keep
   the last analyzed eval until it lands (board page looks back up to 4
