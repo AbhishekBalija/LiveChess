@@ -172,3 +172,43 @@ export function isEngineEvent(tour: { name?: unknown; info?: { format?: unknown 
   const text = `${String(tour?.name ?? "")} ${String(tour?.info?.format ?? "")}`;
   return ENGINE_EVENT.test(text);
 }
+
+// Player and board facts from a broadcast game's PGN headers, for the
+// featured game (#52) and later personalization (#54). Anything missing or
+// malformed is null; nothing here is required.
+export interface GameFacts {
+  whiteRating: number | null;
+  blackRating: number | null;
+  whiteTitle: string | null;
+  blackTitle: string | null;
+  whiteFideId: number | null;
+  blackFideId: number | null;
+  whiteFed: string | null;
+  blackFed: string | null;
+  whiteTeam: string | null;
+  blackTeam: string | null;
+  board: number | null;
+}
+
+export function gameFacts(headers: Record<string, string | undefined>): GameFacts {
+  const int = (raw: string | undefined): number | null => {
+    const n = Number(raw);
+    return raw !== undefined && raw.trim() !== "" && Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const str = (raw: string | undefined): string | null => (raw && raw.trim() !== "" && raw !== "?" ? raw.trim() : null);
+  // Lichess writes the board as "round.board", e.g. "8.3".
+  const board = /^\d+\.(\d+)$/.exec(headers["Round"] ?? "")?.[1];
+  return {
+    whiteRating: int(headers["WhiteElo"]),
+    blackRating: int(headers["BlackElo"]),
+    whiteTitle: str(headers["WhiteTitle"]),
+    blackTitle: str(headers["BlackTitle"]),
+    whiteFideId: int(headers["WhiteFideId"]),
+    blackFideId: int(headers["BlackFideId"]),
+    whiteFed: str(headers["WhiteFed"]),
+    blackFed: str(headers["BlackFed"]),
+    whiteTeam: str(headers["WhiteTeam"]),
+    blackTeam: str(headers["BlackTeam"]),
+    board: int(board),
+  };
+}

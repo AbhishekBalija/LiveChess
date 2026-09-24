@@ -57,6 +57,10 @@ The PGN score of a Game: `1-0`, `0-1`, `1/2-1/2`, or `*` while still in progress
 A Game whose Result is still `*` and that had a move or Correction in the last three hours. A Game with any other Result is finished.
 _Avoid_: in-progress game, ongoing game
 
+**Featured game**:
+The live Game LiveChess shows first, the one with the highest hype score: how exciting it is right now from the players' strength, the event, the board, recent eval swings, tension and freshness.
+_Avoid_: game of the round, top game
+
 **Upcoming round**:
 A Round scheduled to start within the next week that has not started yet. Shown to fans as "Starting soon".
 

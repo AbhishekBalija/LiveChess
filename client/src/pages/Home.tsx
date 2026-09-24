@@ -7,11 +7,11 @@ import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
 import { UpcomingCard } from "@/components/UpcomingCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { useNow } from "@/lib/clock"
-import { splitTournamentName, surname } from "@/lib/names"
+import { resultLine, splitTournamentName, surname } from "@/lib/names"
 import { formatMove, sideToMove } from "@/lib/ply"
 import { useUpcoming } from "@/lib/upcoming"
 import { useLiveGames } from "@/lib/useLiveGames"
-import type { GameListItem } from "@/types"
+import type { FeaturedPick, GameListItem } from "@/types"
 
 // Home (issue #19, Matchday design). What is live comes first: a tab row
 // of competitions, a sideways strip of scoreboard cards, the featured
@@ -83,6 +83,9 @@ export function Home() {
           <LiveGames
             games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null}
             startingSoon={tab.id === "live" ? <StartingSoon /> : null}
+            featured={
+              (tab.tournamentId ? live.featured?.byTournament[tab.tournamentId] : live.featured?.global) ?? null
+            }
           />
         )}
       </main>
@@ -93,9 +96,12 @@ export function Home() {
 function LiveGames({
   games,
   startingSoon,
+  featured,
 }: {
   games: GameListItem[] | null
   startingSoon: ReactNode
+  // The server's most exciting game for this tab (#52), if it has one.
+  featured: FeaturedPick | null
 }) {
   const now = useNow()
   if (games === null) {
@@ -117,7 +123,6 @@ function LiveGames({
       </>
     )
   }
-  const [featured] = games
   return (
     <>
       <Strip>
@@ -126,7 +131,7 @@ function LiveGames({
         ))}
       </Strip>
       {startingSoon}
-      {featured && <Featured game={featured} />}
+      {featured && <Featured game={featured.game} reason={featured.reason} />}
     </>
   )
 }
@@ -226,8 +231,10 @@ function Strip({ children }: { children: ReactNode }) {
   )
 }
 
-function Featured({ game }: { game: GameListItem }) {
+function Featured({ game, reason }: { game: GameListItem; reason: string }) {
   const toMove = sideToMove(game.lastPly + 1) === "white" ? "White" : "Black"
+  // A featured game that just ended stays briefly with its result.
+  const finished = game.result !== "*"
   return (
     <section aria-labelledby="featured" className="px-4 md:px-8 lg:px-12">
       <h2 id="featured" className="mb-3 text-[17px] font-bold md:sr-only">Featured game</h2>
@@ -240,14 +247,19 @@ function Featured({ game }: { game: GameListItem }) {
         </div>
         <div className="flex min-w-0 flex-col gap-2 md:gap-4">
           <span className="hidden text-xs font-bold tracking-[0.08em] text-muted-foreground uppercase md:block">
-            Featured game
+            Featured game · <span className="text-primary">{reason}</span>
           </span>
           <span className="font-display text-xl leading-[1.05] font-bold uppercase md:text-4xl">
             {surname(game.white)} <span className="text-muted-foreground">vs</span> {surname(game.black)}
           </span>
-          <span className="text-[13px] font-bold text-gold md:text-xl">
-            {game.lastSan ? `${toMove} to move after ${formatMove(game.lastPly, game.lastSan)}` : "Not started yet"}
+          <span className={`text-[13px] font-bold md:text-xl ${finished ? "text-win" : "text-gold"}`}>
+            {finished
+              ? resultLine(game.result, game.white, game.black)
+              : game.lastSan
+                ? `${toMove} to move after ${formatMove(game.lastPly, game.lastSan)}`
+                : "Not started yet"}
           </span>
+          <span className="text-xs font-semibold text-primary md:hidden">{reason}</span>
           <span className="truncate text-[13px] text-muted-foreground md:text-sm">
             {splitTournamentName(game.tournament.name).title}
           </span>

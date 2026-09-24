@@ -6,6 +6,24 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Featured game picks the most exciting live game (#52). Every live game
+  gets a hype score from player strength and titles (30%), recent eval
+  swings (20%), the event's Lichess tier (15%), a close game late or a
+  classical time scramble (15%), top board (10%) and a recent move (10%).
+  Only games with a move in the last 10 minutes qualify. The pick is
+  re-checked once a minute, changes at most every 2 minutes and only for a
+  game scoring 0.1 more, and a game that just finished stays one more pass
+  with its result. All live and each event tab get their own pick, shown
+  with a short reason ("Top board · avg 2591 · major event").
+- Games store the players' ratings, titles, FIDE ids, federations and
+  teams plus the board number, from the PGN headers; events store their
+  Lichess tier and FIDE time control class (migration 0007).
+
+### Fixed
+- The supervisor's startup sweep no longer pulls stale engine-event rounds
+  again (#39 follow-up).
+
 ## [0.4.0] - 2026-09-24
 
 Slice 2 complete, plus a round of UX work from the owner: event grids,

@@ -1,7 +1,7 @@
 import { and, isNotNull, eq, lt, sql } from "drizzle-orm";
 import { envInt } from "../env";
 import { db, type Db } from "../db/client";
-import { games } from "../db/schema";
+import { games, tournaments } from "../db/schema";
 import { isEngineEvent } from "./lichess";
 import { fetchStream, type StreamPort } from "./stream";
 import {
@@ -30,7 +30,15 @@ export const TOP_URL = "https://lichess.org/api/broadcast/top?page=1";
 export interface OngoingRound {
   roundId: string;
   name: string;
+  // The event's Lichess id, tier and FIDE time control class, saved onto
+  // our tournament row for the featured game (#52).
+  tourId?: string;
+  tier?: number | null;
+  fideTc?: string | null;
 }
+
+const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
 // Ongoing rounds from the active broadcasts, in Lichess's order.
 // Lichess lists one tour per group, but big events are split into many
@@ -43,7 +51,7 @@ export async function fetchOngoingRounds(http: HttpPort): Promise<OngoingRound[]
   if (!res.ok) throw new Error(`broadcast list failed with ${res.status}`);
   const body = (await res.json()) as {
     active?: Array<{
-      tour?: { id?: unknown; name?: unknown; info?: { format?: unknown } };
+      tour?: { id?: unknown; name?: unknown; tier?: unknown; info?: { format?: unknown; fideTC?: unknown } };
       group?: unknown;
       round?: { id?: unknown; name?: unknown; ongoing?: unknown };
     }>;
@@ -58,7 +66,13 @@ export async function fetchOngoingRounds(http: HttpPort): Promise<OngoingRound[]
   for (const b of body.active ?? []) {
     const id = b.round?.id;
     if (typeof id !== "string" || b.round?.ongoing !== true || isEngineEvent(b.tour)) continue;
-    add({ roundId: id, name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}` });
+    add({
+      roundId: id,
+      name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}`,
+      tourId: str(b.tour?.id) ?? undefined,
+      tier: num(b.tour?.tier),
+      fideTc: str(b.tour?.info?.fideTC),
+    });
     if (typeof b.group === "string" && typeof b.tour?.id === "string") {
       try {
         for (const round of await otherSectionRounds(http, b.tour.id)) add(round);
@@ -79,7 +93,7 @@ export function sectionOf(groupTourName: string): string {
 }
 
 type TourResponse = {
-  tour?: { name?: unknown };
+  tour?: { name?: unknown; tier?: unknown; info?: { fideTC?: unknown } };
   group?: { tours?: Array<{ id?: unknown; name?: unknown; live?: unknown }> };
   rounds?: Array<{ id?: unknown; name?: unknown; ongoing?: unknown }>;
 };
@@ -108,7 +122,13 @@ async function otherSectionRounds(http: HttpPort, listedTourId: string): Promise
     const tour = await fetchTour(http, tourId);
     const round = tour.rounds?.find((r) => r.ongoing === true);
     if (typeof round?.id === "string") {
-      rounds.push({ roundId: round.id, name: `${String(tour.tour?.name ?? "")} · ${String(round.name ?? "")}` });
+      rounds.push({
+        roundId: round.id,
+        name: `${String(tour.tour?.name ?? "")} · ${String(round.name ?? "")}`,
+        tourId,
+        tier: num(tour.tour?.tier),
+        fideTc: str(tour.tour?.info?.fideTC),
+      });
     }
   }
   return rounds;
@@ -125,8 +145,9 @@ export function roundsToStart(ongoing: OngoingRound[], following: ReadonlySet<st
 // followers stopped before the end, so their results are missing.
 export async function staleRoundIds(database: Db, idleMinutes = 30): Promise<string[]> {
   const rows = await database
-    .selectDistinct({ roundId: games.roundSourceId })
+    .selectDistinct({ roundId: games.roundSourceId, tournament: tournaments.name })
     .from(games)
+    .innerJoin(tournaments, eq(tournaments.id, games.tournamentId))
     .where(
       and(
         eq(games.result, "*"),
@@ -134,7 +155,24 @@ export async function staleRoundIds(database: Db, idleMinutes = 30): Promise<str
         lt(games.updatedAt, sql`now() - make_interval(mins => ${idleMinutes})`),
       ),
     );
-  return rows.flatMap((r) => (r.roundId ? [r.roundId] : []));
+  // Engine events are not covered (#39), not even for a last pull.
+  return rows.flatMap((r) => (r.roundId && !isEngineEvent({ name: r.tournament }) ? [r.roundId] : []));
+}
+
+// Keep each followed event's tier and time control class current; events
+// stored before these existed get them here too.
+export async function saveTourFacts(database: Db, rounds: OngoingRound[]): Promise<void> {
+  for (const r of rounds) {
+    if (!r.tourId) continue;
+    const facts = Object.fromEntries(
+      Object.entries({ tier: r.tier, fideTc: r.fideTc }).filter(([, v]) => v !== null && v !== undefined),
+    );
+    if (Object.keys(facts).length === 0) continue;
+    await database
+      .update(tournaments)
+      .set(facts)
+      .where(and(eq(tournaments.source, "lichess"), eq(tournaments.sourceId, r.tourId)));
+  }
 }
 
 export interface SupervisorOptions {
@@ -190,6 +228,7 @@ export class Supervisor {
   async discover(): Promise<void> {
     const ongoing = await fetchOngoingRounds(this.http);
     const live = new Set(ongoing.map((r) => r.roundId));
+    await saveTourFacts(this.database, ongoing).catch((err) => console.warn("supervisor: could not save tour facts", err));
 
     for (const roundId of this.following()) {
       if (live.has(roundId)) {

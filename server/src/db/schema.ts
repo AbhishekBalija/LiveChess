@@ -21,6 +21,10 @@ export const tournaments = pgTable(
     source: text("source").notNull(),
     sourceId: text("source_id").notNull(),
     name: text("name").notNull(),
+    // Lichess's importance tier (3 normal, 4 high, 5 best) and FIDE time
+    // control class ("standard", "rapid", "blitz"), for the featured game.
+    tier: integer("tier"),
+    fideTc: text("fide_tc"),
   },
   (t) => [uniqueIndex("tournaments_source_idx").on(t.source, t.sourceId)],
 );
@@ -43,6 +47,20 @@ export const games = pgTable(
     roundSourceId: text("round_source_id"),
     // PGN Result header: "*" while the game is in progress, else the score.
     result: text("result").notNull().default("*"),
+    // Players as the PGN headers give them (WhiteElo, WhiteTitle,
+    // WhiteFideId, WhiteFed, WhiteTeam); null when the source leaves them out.
+    whiteRating: integer("white_rating"),
+    blackRating: integer("black_rating"),
+    whiteTitle: text("white_title"),
+    blackTitle: text("black_title"),
+    whiteFideId: integer("white_fide_id"),
+    blackFideId: integer("black_fide_id"),
+    whiteFed: text("white_fed"),
+    blackFed: text("black_fed"),
+    whiteTeam: text("white_team"),
+    blackTeam: text("black_team"),
+    // Board number within the round, from the PGN Round header "8.3".
+    board: integer("board"),
     // Bumped with every checkpoint change, so lists can show latest activity first.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

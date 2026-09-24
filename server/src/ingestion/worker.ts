@@ -14,9 +14,11 @@ import {
 } from "./stream";
 import {
   broadcastSlugs,
+  gameFacts,
   gameSourceId,
   parseBroadcastGame,
   splitPgnGames,
+  type GameFacts,
 } from "./lichess";
 
 // Long-running Lichess broadcast ingestion. Polls the round PGN export,
@@ -83,6 +85,9 @@ export async function fetchRoundPgn(http: HttpPort, roundId: string): Promise<st
 interface TourInfo {
   sourceId: string;
   name: string;
+  // Lichess tier and FIDE time control class, when the metadata has them.
+  tier?: number | null;
+  fideTc?: string | null;
 }
 
 // Broadcast tour id and name from the round metadata endpoint. Falls
@@ -102,11 +107,16 @@ export async function fetchTourInfo(
     );
     if (!res.ok) throw new Error(`metadata failed with ${res.status}`);
     const body = (await res.json()) as {
-      tour?: { id?: unknown; name?: unknown };
+      tour?: { id?: unknown; name?: unknown; tier?: unknown; info?: { fideTC?: unknown } };
     };    if (typeof body.tour?.id !== "string" || typeof body.tour?.name !== "string") {
       throw new Error("metadata missing tour id or name");
     }
-    return { sourceId: body.tour.id, name: body.tour.name };
+    return {
+      sourceId: body.tour.id,
+      name: body.tour.name,
+      tier: typeof body.tour.tier === "number" ? body.tour.tier : null,
+      fideTc: typeof body.tour.info?.fideTC === "string" ? body.tour.info.fideTC : null,
+    };
   } catch (err) {
     console.warn("tournament metadata unavailable, using PGN Event header", err);
     return { sourceId: `round-${roundId}`, name: eventName };
@@ -117,13 +127,16 @@ export async function upsertTournament(
   database: Db | DbTx,
   sourceId: string,
   name: string,
+  extra: { tier?: number | null; fideTc?: string | null } = {},
 ): Promise<string> {
+  // Only overwrite tier / time control with real values, never with null.
+  const known = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== null && v !== undefined));
   const [row] = await database
     .insert(tournaments)
-    .values({ source: "lichess", sourceId, name })
+    .values({ source: "lichess", sourceId, name, ...known })
     .onConflictDoUpdate({
       target: [tournaments.source, tournaments.sourceId],
-      set: { name },
+      set: { name, ...known },
     })
     .returning({ id: tournaments.id });
   if (!row) throw new Error("tournament upsert returned no row");
@@ -145,6 +158,7 @@ export async function upsertGame(
   black: string,
   result = "*",
   roundSourceId: string | null = null,
+  facts: Partial<GameFacts> = {},
 ): Promise<string> {
   const [row] = await database
     .insert(games)
@@ -157,12 +171,13 @@ export async function upsertGame(
       currentFen: "",
       result,
       roundSourceId,
+      ...facts,
     })
     .onConflictDoUpdate({
       target: [games.source, games.sourceId],
       // Result is only set on insert. A change on an existing game goes
       // through ingestGame, which bumps Version and emits GameResult.
-      set: { white, black, ...(roundSourceId ? { roundSourceId } : {}) },
+      set: { white, black, ...(roundSourceId ? { roundSourceId } : {}), ...facts },
     })
     .returning({ id: games.id });
   if (!row) throw new Error("game upsert returned no row");
@@ -299,7 +314,10 @@ export async function ingestPgnGame(
     const tour = slugs
       ? await fetchTourInfo(http, slugs.tourSlug, slugs.roundSlug, roundId, eventName)
       : { sourceId: `round-${roundId}`, name: eventName };
-    tourCache.tournamentId = await upsertTournament(database, tour.sourceId, tour.name);
+    tourCache.tournamentId = await upsertTournament(database, tour.sourceId, tour.name, {
+      tier: tour.tier,
+      fideTc: tour.fideTc,
+    });
   }
   const result = normalizeResult(game.headers["Result"]);
   const gameId = await upsertGame(
@@ -310,6 +328,7 @@ export async function ingestPgnGame(
     game.headers["Black"] ?? "?",
     result,
     roundId,
+    gameFacts(game.headers),
   );
   const counts = await ingestGame(database, gameId, game.plies, result);
   return { ...counts, sourceId, result };

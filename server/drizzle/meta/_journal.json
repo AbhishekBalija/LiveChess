@@ -50,6 +50,13 @@
       "when": 1790245812354,
       "tag": "0006_white_phil_sheldon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790258622070,
+      "tag": "0007_fearless_eternity",
+      "breakpoints": true
     }
   ]
 }

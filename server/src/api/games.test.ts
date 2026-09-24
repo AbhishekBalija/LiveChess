@@ -51,6 +51,7 @@ describe("listGames", () => {
         calls.push([status, limit]);
         return [item("a"), item("b")];
       },
+      listGamesByIds: async () => [],
     };
     const res = await listGames(db, "live");
     expect(calls).toEqual([["live", LIST_LIMIT]]);
