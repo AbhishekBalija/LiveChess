@@ -6,6 +6,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Board page (#49):
+  - A thick eval bar exactly the board's width, saying who is better in
+    words ("Black is better -2.6", "White mates in 3", "White won") on the
+    leading side, with notches marking level under the board's centre.
+  - Step through the game: click any move, use the arrow keys (Home and
+    End jump to the start and back to live), or the first / previous /
+    next / newest buttons. New moves do not move the board while you look
+    back; "Back to live" returns. The bar follows the viewed position.
+  - An eval graph of the whole game above the moves: hover for the move
+    and eval, click to jump there. It shows how many moves the engine has
+    analyzed so far.
+
 ### Fixed
 - Split events are covered (#48): Lichess lists one tour per group, so the
   supervisor only saw the Olympiad's "Open | Matches 1-12", missed Women

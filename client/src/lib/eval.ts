@@ -55,3 +55,28 @@ export function barPercent(result: string | undefined, e: MoveEval | null, lastP
 export function listEval(row: { evalCp: number | null; evalMate: number | null }): MoveEval | null {
   return row.evalCp === null && row.evalMate === null ? null : { cp: row.evalCp, mate: row.evalMate }
 }
+
+// The eval in words for the thick board-page bar. Thresholds follow the
+// usual chess reading: under half a pawn is equal, 1.5 pawns is a clear
+// edge, 3 pawns is usually winning.
+export function evalWords(e: MoveEval): string {
+  if (e.mate !== null) {
+    if (e.mate === 0) return "Checkmate"
+    return `${e.mate > 0 ? "White" : "Black"} mates in ${Math.abs(e.mate)}`
+  }
+  const cp = e.cp ?? 0
+  const side = cp > 0 ? "White" : "Black"
+  const size = Math.abs(cp)
+  if (size < 50) return "Equal"
+  if (size < 150) return `${side} is slightly better`
+  if (size < 300) return `${side} is better`
+  return `${side} is winning`
+}
+
+// Words for a finished game's bar.
+export function resultWords(result: string): string | null {
+  if (result === "1-0") return "White won"
+  if (result === "0-1") return "Black won"
+  if (result === "1/2-1/2") return "Draw"
+  return null
+}

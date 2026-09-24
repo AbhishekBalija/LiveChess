@@ -1,15 +1,17 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { Link, useParams } from "react-router"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
 import { EvalBar } from "@/components/EvalBar"
-import { barPercent, currentEval, formatEval } from "@/lib/eval"
+import { EvalGraph } from "@/components/EvalGraph"
+import { useMoveBrowser, type MoveBrowser } from "@/lib/browse"
+import { barPercent, evalWords, formatEval, resultWords } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
-import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
+import { clocksOf, type GameState, type LiveMove, type MoveEval } from "@/lib/game"
 import { resultLine, splitTournamentName } from "@/lib/names"
 import { formatMove, moveNumber, sideToMove, type Side } from "@/lib/ply"
 import { useLiveGame, type ConnectionStatus } from "@/lib/useLiveGame"
@@ -24,6 +26,7 @@ import { useLiveGame, type ConnectionStatus } from "@/lib/useLiveGame"
 export function BoardView() {
   const { id = "" } = useParams()
   const { state, status, notFound } = useLiveGame(id)
+  const browser = useMoveBrowser(id, state?.lastPly ?? 0)
   const now = useNow()
   const palette = paletteFor(id)
 
@@ -61,8 +64,12 @@ export function BoardView() {
 
   const toMove: Side = sideToMove(state.lastPly + 1)
   const lastMove = state.moves.get(state.lastPly) ?? null
-  const prevFen = state.lastPly > 1 ? state.moves.get(state.lastPly - 1)?.fen : START_FEN
-  const highlight = lastMove && prevFen ? changedSquares(prevFen, state.fen) : undefined
+  // The position on the board: the newest one, or a ply being looked at.
+  const viewed = browser.viewedPly
+  const fenAt = (ply: number): string | undefined => (ply === 0 ? START_FEN : state.moves.get(ply)?.fen)
+  const viewedFen = viewed === state.lastPly ? state.fen : (fenAt(viewed) ?? state.fen)
+  const prevFen = viewed > 0 ? fenAt(viewed - 1) : undefined
+  const highlight = prevFen ? changedSquares(prevFen, viewedFen) : undefined
   const lastMoveAgo = state.lastMoveAt !== null && state.lastPly > 0 ? timeAgo(now - state.lastMoveAt) : null
   // A finished game: clocks stop, nobody is "to move", and the status
   // line shows the result instead.
@@ -74,10 +81,11 @@ export function BoardView() {
     white: runningClock(lastClocks.white, running && toMove === "white", state.lastMoveAt, now),
     black: runningClock(lastClocks.black, running && toMove === "black", state.lastMoveAt, now),
   }
-  // Engine eval of the current position (ADR 0006), once the worker has it.
-  // A finished game's bar shows the result instead, with no number.
-  const evalNow = currentEval(state)
-  const evalText = !finished && evalNow ? formatEval(evalNow) : null
+  // Engine eval of the position on the board (ADR 0006), once the worker
+  // has it. At the end of a finished game the bar shows the result.
+  const evalNow = state.moves.get(viewed)?.eval ?? null
+  const showResult = finished && !browser.browsing
+  const evalText = !showResult && evalNow ? formatEval(evalNow) : null
   const white = state.white ?? "White"
   const black = state.black ?? "Black"
   const statusText = finished
@@ -115,28 +123,109 @@ export function BoardView() {
           <PhonePlayer side="black" name={black} clock={clocks.black} active={!finished && toMove === "black"} />
           {/* Desktop: never taller than the screen under the scoreboard. */}
           <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
-            <ChessBoard fen={state.fen} highlight={highlight} palette={palette} />
-            <div className="mt-2.5 flex items-center gap-3 md:mt-3.5">
-              <EvalBar
-                whitePercent={barPercent(state.result, evalNow, state.lastPly)}
-                label={evalText}
-                className="h-1.5 flex-1 rounded-full"
-              />
-              {evalText && (
-                <span className="w-12 text-right font-mono text-xs font-semibold text-muted-foreground">{evalText}</span>
-              )}
-            </div>
+            <ChessBoard fen={viewedFen} highlight={highlight} palette={palette} />
+            {/* Exactly the board's width, so level (the centre tick) sits
+                under the middle of the board. */}
+            <EvalBar
+              whitePercent={barPercent(showResult ? state.result : undefined, evalNow, viewed)}
+              label={evalText}
+              {...barWords(showResult ? state.result ?? "" : null, evalNow, viewed, viewedFen)}
+              className="mt-2.5 h-7 rounded-md md:mt-3"
+            />
+            <MoveControls browser={browser} lastPly={state.lastPly} viewedMove={state.moves.get(viewed) ?? null} />
           </div>
           <PhonePlayer side="white" name={white} clock={clocks.white} active={!finished && toMove === "white"} />
           <p className={`px-5 pt-1 text-sm font-bold md:hidden ${finished ? "text-win" : "text-gold"}`}>{statusText}</p>
         </div>
 
         <section aria-labelledby="moves-heading" className="flex min-w-0 flex-col gap-4 px-4 md:px-0">
+          {state.lastPly >= 2 && (
+            <>
+              <h2 className="text-lg font-bold md:text-xl">Eval</h2>
+              <EvalGraph moves={state.moves} lastPly={state.lastPly} viewedPly={viewed} onPick={browser.goTo} />
+            </>
+          )}
           <h2 id="moves-heading" className="text-lg font-bold md:text-xl">Moves</h2>
-          <MoveList moves={state.moves} lastPly={state.lastPly} />
+          <MoveList moves={state.moves} viewedPly={viewed} lastPly={state.lastPly} onPick={browser.goTo} />
         </section>
       </main>
     </AppShell>
+  )
+}
+
+// What the thick bar says, and on which side: the leading side's end, or
+// the middle when level.
+function barWords(
+  result: string | null,
+  e: MoveEval | null,
+  ply: number,
+  fen: string,
+): { words: ReactNode; align: "left" | "center" | "right" } {
+  if (result) {
+    return { words: resultWords(result) ?? result, align: result === "1-0" ? "left" : result === "0-1" ? "right" : "center" }
+  }
+  if (!e) return { words: ply === 0 ? "Start position" : "Engine is thinking...", align: "center" }
+  const number = formatEval(e)
+  // Mates and proven wins already say it all in words.
+  const words =
+    number.startsWith("#") || number.endsWith("wins") ? (
+      evalWords(e)
+    ) : (
+      <>
+        <span>{evalWords(e)}</span>
+        <span className="font-mono font-semibold opacity-70">{number}</span>
+      </>
+    )
+  let lead: number
+  if (e.mate === 0) lead = fen.split(" ")[1] === "w" ? -1 : 1
+  else if (e.mate !== null) lead = e.mate
+  else lead = Math.abs(e.cp ?? 0) < 50 ? 0 : (e.cp ?? 0)
+  return { words, align: lead > 0 ? "left" : lead < 0 ? "right" : "center" }
+}
+
+// First / previous / next / newest, plus "Back to live" while looking back.
+function MoveControls({
+  browser,
+  lastPly,
+  viewedMove,
+}: {
+  browser: MoveBrowser
+  lastPly: number
+  viewedMove: LiveMove | null
+}) {
+  const atStart = browser.viewedPly === 0
+  const atLive = !browser.browsing
+  const button =
+    "flex size-10 items-center justify-center rounded-md text-foreground hover:bg-secondary disabled:text-muted-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+  return (
+    <div className="mt-2 flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-sm text-muted-foreground">
+        {browser.browsing ? (viewedMove ? `Viewing ${formatMove(viewedMove.ply, viewedMove.san)}` : "Viewing the start") : ""}
+      </span>
+      <div className="flex items-center gap-1">
+        {browser.browsing && (
+          <button
+            type="button"
+            onClick={() => browser.goTo(null)}
+            className="mr-2 h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground"
+          >
+            Back to live
+          </button>
+        )}
+        <button type="button" aria-label="First move" className={button} disabled={atStart || lastPly === 0} onClick={() => browser.goTo(0)}>
+          <ChevronsLeft className="size-5" aria-hidden />
+        </button>
+        <button type="button" aria-label="Previous move" className={button} disabled={atStart || lastPly === 0} onClick={() => browser.step(-1)}>
+          <ChevronLeft className="size-5" aria-hidden />
+        </button>
+        <button type="button" aria-label="Next move" className={button} disabled={atLive} onClick={() => browser.step(1)}>
+          <ChevronRight className="size-5" aria-hidden />
+        </button>
+        <button type="button" aria-label="Newest move" className={button} disabled={atLive} onClick={() => browser.goTo(null)}>
+          <ChevronsRight className="size-5" aria-hidden />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -246,16 +335,38 @@ function PhonePlayer({ side, name, clock, active }: { side: Side; name: string; 
 }
 
 // Grouped notation, one row per move number: "12. Nf3 Nf6". Scrolls its
-// own box (not the page) to the newest row.
-function MoveList({ moves, lastPly }: { moves: GameState["moves"]; lastPly: number }) {
+// Grouped notation, one row per move number: "12. Nf3 Nf6". Each move is
+// a button that shows that position. The list scrolls its own box (not the
+// page): to the newest row while following live, else to the viewed move.
+function MoveList({
+  moves,
+  viewedPly,
+  lastPly,
+  onPick,
+}: {
+  moves: GameState["moves"]
+  viewedPly: number
+  lastPly: number
+  onPick: (ply: number | null) => void
+}) {
   const scroller = useRef<HTMLOListElement>(null)
   const plies = [...moves.keys()].sort((a, b) => a - b)
   const last = plies[plies.length - 1] ?? 0
 
   useEffect(() => {
-    const el = scroller.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [last])
+    const box = scroller.current
+    if (!box) return
+    if (viewedPly === lastPly) {
+      box.scrollTop = box.scrollHeight
+      return
+    }
+    const cell = box.querySelector<HTMLElement>('[aria-current="step"]')
+    if (!cell) return
+    const top = cell.offsetTop
+    if (top < box.scrollTop || top + cell.offsetHeight > box.scrollTop + box.clientHeight) {
+      box.scrollTop = top - box.clientHeight / 2
+    }
+  }, [viewedPly, lastPly, last])
 
   if (plies.length === 0) {
     return <p className="rounded-lg bg-card px-4 py-6 text-sm text-muted-foreground">Waiting for the first move...</p>
@@ -267,32 +378,37 @@ function MoveList({ moves, lastPly }: { moves: GameState["moves"]; lastPly: numb
     const black = moves.get(2 * n)
     if (white || black) rows.push({ n, white, black })
   }
+  const pick = (ply: number) => onPick(ply >= lastPly ? null : ply)
 
   return (
     <ol
       ref={scroller}
       aria-label="Moves"
-      className="max-h-80 overflow-y-auto rounded-lg bg-card py-2 font-mono text-[15px] md:max-h-[560px]"
+      className="relative max-h-80 overflow-y-auto rounded-lg bg-card py-2 font-mono text-[15px] md:max-h-[420px]"
     >
       {rows.map((row) => (
         <li key={row.n} className="grid grid-cols-[3.25rem_1fr_1fr] items-center px-2 odd:bg-white/[0.02]">
           <span className="pl-2 text-muted-foreground">{row.n}.</span>
-          <MoveCell move={row.white} current={row.white?.ply === lastPly} />
-          <MoveCell move={row.black} current={row.black?.ply === lastPly} />
+          <MoveCell move={row.white} current={row.white?.ply === viewedPly} onPick={pick} />
+          <MoveCell move={row.black} current={row.black?.ply === viewedPly} onPick={pick} />
         </li>
       ))}
     </ol>
   )
 }
 
-function MoveCell({ move, current }: { move?: LiveMove; current: boolean }) {
+function MoveCell({ move, current, onPick }: { move?: LiveMove; current: boolean; onPick: (ply: number) => void }) {
   if (!move) return <span />
   return (
-    <span
+    <button
+      type="button"
       aria-current={current ? "step" : undefined}
-      className={`mx-0.5 my-1 w-fit rounded-md px-2.5 py-1 ${current ? "bg-primary font-bold text-primary-foreground" : ""}`}
+      onClick={() => onPick(move.ply)}
+      className={`mx-0.5 my-1 w-fit rounded-md px-2.5 py-1 text-left ${
+        current ? "bg-primary font-bold text-primary-foreground" : "hover:bg-secondary"
+      }`}
     >
       {move.san}
-    </span>
+    </button>
   )
 }

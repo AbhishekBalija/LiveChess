@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { barPercent, formatEval, whiteWinPercent } from "./eval"
+import { barPercent, evalWords, formatEval, whiteWinPercent } from "./eval"
 
 describe("formatEval", () => {
   it("shows pawns with one decimal from White's side", () => {
@@ -41,5 +41,17 @@ describe("barPercent", () => {
     expect(barPercent("1/2-1/2", null, 40)).toBe(50)
     expect(barPercent("*", { cp: null, mate: 2 }, 40)).toBe(100)
     expect(barPercent("*", null, 40)).toBe(50)
+  })
+})
+
+describe("evalWords", () => {
+  it("reads the eval like a commentator would", () => {
+    expect(evalWords({ cp: 20, mate: null })).toBe("Equal")
+    expect(evalWords({ cp: -90, mate: null })).toBe("Black is slightly better")
+    expect(evalWords({ cp: 200, mate: null })).toBe("White is better")
+    expect(evalWords({ cp: -450, mate: null })).toBe("Black is winning")
+    expect(evalWords({ cp: null, mate: 3 })).toBe("White mates in 3")
+    expect(evalWords({ cp: null, mate: -1 })).toBe("Black mates in 1")
+    expect(evalWords({ cp: null, mate: 0 })).toBe("Checkmate")
   })
 })
