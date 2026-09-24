@@ -25,6 +25,11 @@ export const tournaments = pgTable(
     // control class ("standard", "rapid", "blitz"), for the featured game.
     tier: integer("tier"),
     fideTc: text("fide_tc"),
+    // Lichess splits big events into several tours under one group (the
+    // Olympiad: "Open | Matches 1-12", "Women | Matches 1-25", ...). The
+    // group's name, and this tour's short name within it (#47).
+    groupName: text("group_name"),
+    groupTourName: text("group_tour_name"),
   },
   (t) => [uniqueIndex("tournaments_source_idx").on(t.source, t.sourceId)],
 );

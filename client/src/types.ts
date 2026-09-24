@@ -46,7 +46,9 @@ export interface GameListItem {
   white: string
   black: string
   result: string
-  tournament: { id: string; name: string }
+  // group/section: set when Lichess splits the event into several tours,
+  // e.g. "46th FIDE Chess Olympiad ..." and "Open | Matches 1-12" (#47).
+  tournament: { id: string; name: string; group: string | null; section: string | null }
   lastPly: number
   lastSan: string | null
   whiteClock: string | null

@@ -6,6 +6,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Events page groups split events (#47): one card per event with its live
+  total, and each Lichess tour inside it as a row ("Open · Matches 1-12",
+  "Women · Matches 1-25") or, for short names like "C9" / "C11", as chips.
+  Cards flow in columns so there are no gaps. Events store their Lichess
+  group name and short tour name (migration 0008), saved by the
+  supervisor's discovery; the games list returns them with each game.
+
 ### Added
 - Featured game picks the most exciting live game (#52). Every live game
   gets a hype score from player strength and titles (30%), recent eval
