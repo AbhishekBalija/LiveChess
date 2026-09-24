@@ -27,7 +27,7 @@ function snapshot(overrides: Partial<GameStateResponse> = {}): GameStateResponse
 }
 
 function event(overrides: Partial<LiveEvent> = {}): LiveEvent {
-  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, result: null, ...overrides }
+  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, result: null, eval: null, ...overrides }
 }
 
 describe("parseLiveEvent", () => {
@@ -37,7 +37,7 @@ describe("parseLiveEvent", () => {
   it("parses string ply/version to numbers", () => {
     expect(
       parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", clock: "1:29:10", version: "3" }),
-    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3, result: null })
+    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3, result: null, eval: null })
   })
 
   it("parses a GameResult, which may come before any move", () => {
@@ -119,6 +119,31 @@ describe("applyEvent", () => {
   function twoPlyState(): GameState {
     return fromSnapshot(snapshot())
   }
+
+  it("puts an EvalUpdated on its exact move without touching Version", () => {
+    const state = twoPlyState()
+    const out = applyEvent(state, event({ type: "EvalUpdated", ply: 2, san: "", fen: "", version: 2, eval: { cp: -20, mate: null } }))
+    if (!("state" in out)) throw new Error("unexpected gap")
+    expect(out.state.version).toBe(2)
+    expect(out.state.moves.get(2)?.eval).toEqual({ cp: -20, mate: null })
+    // An eval for an older version of the ply (since corrected) is ignored.
+    const stale = applyEvent(state, event({ type: "EvalUpdated", ply: 2, version: 1, eval: { cp: 5, mate: null } }))
+    expect(stale).toEqual({ state })
+  })
+
+  it("parses eval fields from the gateway's strings", () => {
+    expect(
+      parseLiveEvent(GID, { type: "EvalUpdated", gameId: GID, ply: "2", san: "", fen: "", version: "2", evalCp: "", evalMate: "-3" }),
+    ).toMatchObject({ eval: { cp: null, mate: -3 } })
+  })
+
+  it("attaches resync evals only to the move version they were computed for", () => {
+    const state = fromSnapshot(
+      snapshot({ evals: [{ ply: 1, version: 1, cp: 30, mate: null }, { ply: 2, version: 9, cp: 99, mate: null }] }),
+    )
+    expect(state.moves.get(1)?.eval).toEqual({ cp: 30, mate: null })
+    expect(state.moves.get(2)?.eval).toBeUndefined()
+  })
 
   it("applies a GameResult without touching moves, board or last move time", () => {
     const state = { ...twoPlyState(), result: "*", lastMoveAt: 1000 }

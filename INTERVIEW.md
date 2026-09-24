@@ -30,6 +30,20 @@ When a phone switches networks or a laptop sleeps, the other side never gets a c
 **Q: Why an app-level heartbeat when WebSocket already has ping/pong?**
 Protocol pings solve the server side: Bun pings every socket and closes it after `idleTimeout` (60s here) with no pong. But browsers answer pings automatically and never expose them to JavaScript, so the client cannot use them. The gateway also sends a small `{"type":"ping"}` frame every 25s, and the client reconnects if it hears nothing for 60s (two missed heartbeats plus margin). On reconnect it resyncs from its version, so nothing is lost.
 
+## Eval worker
+
+**Q: How do you run a GPL engine from an Apache-2.0 project?**
+Stockfish runs as its own process and we only talk to it over UCI, a plain text protocol on stdin and stdout (`position fen ...`, `go nodes 300000`, read `info ... score cp 35` lines until `bestmove`). Nothing is linked or bundled: the binary is installed on the machine. That separation is the usual way GUIs and servers use Stockfish without their own code becoming GPL.
+
+**Q: Why a fixed node count instead of a time limit?**
+With a time limit, the same position gets a deeper search on a quiet server and a shallower one under load, so its eval changes with server load. The move classifier compares evals between moves, so that noise would look like mistakes. A fixed node count does the same work every time and gives the same answer.
+
+**Q: How does the worker pick what to analyze without a job queue?**
+Its to-do list is a query: live moves with no eval yet, a game's newest move first, most recently active games first, older moves after. A partial index keeps it small once the backlog is done. No queue state means a restart just carries on, and nothing can get lost between a queue and the database. When the worker saves a result it updates the move only if it is still live; if a correction superseded it mid-search, the update matches nothing and the result is dropped.
+
+**Q: The eval worker publishes events too. Why does an eval not bump the game's Version?**
+Version orders changes to the game itself, and a gap in it makes the client resync. Evals arrive late and out of order by design (newest move first, older ones backfilled), so putting them on Version would make clients see "gaps" and resync all the time over something that did not change the game at all. Instead, the eval event names the move row's own Version, and the client only attaches it to that exact move: an eval computed for a move that was later corrected is simply ignored. The trade-off is that resync cannot find missed evals by version, so it returns the game's stored evals separately.
+
 ## Ply vs move number
 
 **Q: Why is move identity keyed on ply and not move number?**

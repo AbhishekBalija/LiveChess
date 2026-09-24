@@ -14,12 +14,23 @@ export interface MissedMove {
   version: number
 }
 
+// Stored eval of one move, from White's side (server EvalRow, ADR 0006).
+export interface EvalRow {
+  ply: number
+  // The move row's Version: only attach the eval to that exact move.
+  version: number
+  cp: number | null
+  mate: number | null
+}
+
 export interface GameStateResponse {
   gameId: string
   version: number
   fen: string
   lastMove: LastMove | null
   missedMoves: MissedMove[]
+  // Every stored eval on the Postgres path, only the newest on the cache path.
+  evals?: EvalRow[]
   // Only on the Postgres path; a cache fast-path resync omits them.
   white?: string
   black?: string

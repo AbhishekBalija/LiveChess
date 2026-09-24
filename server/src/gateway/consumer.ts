@@ -22,6 +22,8 @@ export function entryToEvent(fields: Record<string, string>): LiveEvent {
     clock: fields["clock"] ?? "",
     version: fields["version"] ?? "",
     result: fields["result"] ?? "",
+    evalCp: fields["evalCp"] ?? "",
+    evalMate: fields["evalMate"] ?? "",
   };
 }
 

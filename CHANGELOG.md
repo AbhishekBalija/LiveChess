@@ -6,6 +6,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Engine eval (ADR 0006): a new eval worker (`bun run eval`, started by
+  `bun run dev` when Stockfish is installed) analyzes every live move with
+  Stockfish at a fixed node count (`EVAL_NODES`), or asks the Lichess
+  tablebase for positions with 7 pieces or fewer. Newest moves go first,
+  older ones are filled in after. Evals are stored on the move, pushed live
+  as `EvalUpdated` events, returned by resync, and the board page shows the
+  current one ("Eval +0.4", "#3").
+
 ## [0.2.0] - 2026-09-24
 
 Slice 1.5 and the start of Slice 2: LiveChess follows live Lichess

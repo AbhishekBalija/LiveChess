@@ -12,6 +12,8 @@ export interface LiveEvent {
   clock: string;
   version: string;
   result: string;
+  evalCp: string;
+  evalMate: string;
 }
 
 export interface Socket {

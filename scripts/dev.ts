@@ -5,6 +5,8 @@
 //   bun run dev <roundId>       # ...plus one broadcast round instead
 //   bun run dev --no-ingest     # gateway + publisher + client only
 //
+// The eval worker also starts when Stockfish is installed (ADR 0006).
+//
 // Each process's output is prefixed with its name. Ctrl+C stops all of
 // them, and if one crashes the rest are stopped too.
 
@@ -19,6 +21,11 @@ const services: Array<{ name: string; color: number; cwd: string; cmd: string[] 
   { name: "publisher", color: 35, cwd: "server", cmd: [bun, "run", "publisher"] },
   { name: "client", color: 32, cwd: "client", cmd: [bun, "run", "dev"] },
 ];
+if (Bun.which(process.env["STOCKFISH_PATH"] || "stockfish")) {
+  services.push({ name: "eval", color: 34, cwd: "server", cmd: [bun, "run", "eval"] });
+} else {
+  console.log("Stockfish not found, starting without eval (brew install stockfish to enable it)");
+}
 if (arg === undefined) {
   services.push({ name: "supervisor", color: 33, cwd: "server", cmd: [bun, "run", "supervisor"] });
 } else if (arg !== "--no-ingest") {
