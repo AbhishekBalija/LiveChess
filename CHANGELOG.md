@@ -6,6 +6,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Home is calmer (#50): the card strip keeps the first 12 games and has
+  no visible scrollbar (swipe or trackpad, plus arrow buttons on desktop),
+  and the wall of boards under the featured game is replaced by a "Live
+  events" list: each event with its subtitle and live board count, one
+  click from its grid. Competition tabs keep the strip, the featured game
+  and "Watch all N boards".
+
 ### Added
 - Board page (#49):
   - A thick eval bar exactly the board's width, saying who is better in
