@@ -26,6 +26,11 @@ describe("pickUpcoming", () => {
     expect(list.map((r) => r.roundId)).toEqual(["soon", "later"]);
     expect(list[0]).toMatchObject({ tournament: "Tour soon", round: "Round 8", startsAt: "2026-09-23T20:00:00.000Z" });
   });
+
+  it("leaves out engine events (#39)", () => {
+    const engine = { ...entry("tcec", now + hour), tour: { name: "Some Cup", info: { format: "8-engine round robin" } } };
+    expect(pickUpcoming([engine, entry("human", now + hour)], now).map((r) => r.roundId)).toEqual(["human"]);
+  });
 });
 
 describe("UpcomingCache", () => {

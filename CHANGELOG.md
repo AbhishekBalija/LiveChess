@@ -6,6 +6,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Engine-vs-engine events (TCEC and the like) are no longer followed or
+  shown in "Starting soon" (#39): LiveChess covers human chess. They are
+  recognized by the tour name or its format ("14-engine double
+  round-robin"), since Lichess has no flag for them.
+
 ### Added
 - Multi-board grid (`/events/:tournamentId`): every live board of a
   tournament at once, each tile with both players and clocks, the board,

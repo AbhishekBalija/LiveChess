@@ -34,6 +34,19 @@ describe("fetchOngoingRounds", () => {
     const rounds = await fetchOngoingRounds(http);
     expect(rounds.map((r) => r.roundId)).toEqual(["aaaaaaaa", "cccccccc"]);
   });
+
+  it("skips engine events (#39)", async () => {
+    const http: HttpPort = {
+      get: async () =>
+        json({
+          active: [
+            { tour: { name: "TCEC S30: Playoff", info: { format: "14-engine double round-robin" } }, round: { id: "tcec0001", ongoing: true } },
+            { tour: { name: "Club Open", info: { format: "9-round Swiss" } }, round: { id: "human001", ongoing: true } },
+          ],
+        }),
+    };
+    expect((await fetchOngoingRounds(http)).map((r) => r.roundId)).toEqual(["human001"]);
+  });
 });
 
 describe("roundsToStart", () => {
