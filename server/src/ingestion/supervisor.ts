@@ -35,6 +35,9 @@ export interface OngoingRound {
   tourId?: string;
   tier?: number | null;
   fideTc?: string | null;
+  // The Lichess group it belongs to and its short name there (#47).
+  groupName?: string | null;
+  groupTourName?: string | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
@@ -66,16 +69,20 @@ export async function fetchOngoingRounds(http: HttpPort): Promise<OngoingRound[]
   for (const b of body.active ?? []) {
     const id = b.round?.id;
     if (typeof id !== "string" || b.round?.ongoing !== true || isEngineEvent(b.tour)) continue;
-    add({
+    const listed: OngoingRound = {
       roundId: id,
       name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}`,
       tourId: str(b.tour?.id) ?? undefined,
       tier: num(b.tour?.tier),
       fideTc: str(b.tour?.info?.fideTC),
-    });
+      groupName: str(b.group),
+    };
+    add(listed);
     if (typeof b.group === "string" && typeof b.tour?.id === "string") {
       try {
-        for (const round of await otherSectionRounds(http, b.tour.id)) add(round);
+        const group = await otherSectionRounds(http, b.tour.id);
+        listed.groupTourName = group.listedName;
+        for (const round of group.rounds) add(round);
       } catch (err) {
         // The listed tour is still followed; the rest waits for next pass.
         console.warn(`supervisor: could not expand group of ${b.tour.id}`, err);
@@ -94,7 +101,7 @@ export function sectionOf(groupTourName: string): string {
 
 type TourResponse = {
   tour?: { name?: unknown; tier?: unknown; info?: { fideTC?: unknown } };
-  group?: { tours?: Array<{ id?: unknown; name?: unknown; live?: unknown }> };
+  group?: { name?: unknown; tours?: Array<{ id?: unknown; name?: unknown; live?: unknown }> };
   rounds?: Array<{ id?: unknown; name?: unknown; ongoing?: unknown }>;
 };
 
@@ -105,20 +112,25 @@ async function fetchTour(http: HttpPort, tourId: string): Promise<TourResponse> 
 }
 
 // The first live tour of each section other than the listed tour's, and
-// each one's ongoing round.
-async function otherSectionRounds(http: HttpPort, listedTourId: string): Promise<OngoingRound[]> {
-  const tours = (await fetchTour(http, listedTourId)).group?.tours ?? [];
+// each one's ongoing round; plus the listed tour's short name in the group.
+async function otherSectionRounds(
+  http: HttpPort,
+  listedTourId: string,
+): Promise<{ listedName: string | null; rounds: OngoingRound[] }> {
+  const group = (await fetchTour(http, listedTourId)).group;
+  const tours = group?.tours ?? [];
+  const groupName = str(group?.name);
   const listed = tours.find((t) => t.id === listedTourId);
   const covered = new Set<string>(listed ? [sectionOf(String(listed.name ?? ""))] : []);
-  const picks: string[] = [];
+  const picks: Array<{ id: string; name: string }> = [];
   for (const t of tours) {
     const section = sectionOf(String(t.name ?? ""));
     if (typeof t.id !== "string" || t.live !== true || covered.has(section)) continue;
     covered.add(section);
-    picks.push(t.id);
+    picks.push({ id: t.id, name: String(t.name ?? "") });
   }
   const rounds: OngoingRound[] = [];
-  for (const tourId of picks) {
+  for (const { id: tourId, name: shortName } of picks) {
     const tour = await fetchTour(http, tourId);
     const round = tour.rounds?.find((r) => r.ongoing === true);
     if (typeof round?.id === "string") {
@@ -128,10 +140,12 @@ async function otherSectionRounds(http: HttpPort, listedTourId: string): Promise
         tourId,
         tier: num(tour.tour?.tier),
         fideTc: str(tour.tour?.info?.fideTC),
+        groupName,
+        groupTourName: shortName,
       });
     }
   }
-  return rounds;
+  return { listedName: listed ? str(listed.name) : null, rounds };
 }
 
 // Which new rounds to start: ongoing ones we do not follow yet, while
@@ -165,7 +179,7 @@ export async function saveTourFacts(database: Db, rounds: OngoingRound[]): Promi
   for (const r of rounds) {
     if (!r.tourId) continue;
     const facts = Object.fromEntries(
-      Object.entries({ tier: r.tier, fideTc: r.fideTc }).filter(([, v]) => v !== null && v !== undefined),
+      Object.entries({ tier: r.tier, fideTc: r.fideTc, groupName: r.groupName, groupTourName: r.groupTourName }).filter(([, v]) => v !== null && v !== undefined),
     );
     if (Object.keys(facts).length === 0) continue;
     await database

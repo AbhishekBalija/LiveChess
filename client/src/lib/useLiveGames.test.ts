@@ -7,7 +7,7 @@ const g = (id: string): GameListItem => ({
   white: "W",
   black: "B",
   result: "*",
-  tournament: { id: "t", name: "T" },
+  tournament: { id: "t", name: "T", group: null, section: null },
   lastPly: 1,
   lastSan: "e4",
   whiteClock: null,

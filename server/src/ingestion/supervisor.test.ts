@@ -58,6 +58,7 @@ describe("split events (#48)", () => {
 
   it("also follows the first live tour of every other section, right after the listed one", async () => {
     const group = {
+      name: "Olympiad",
       tours: [
         { id: "open0001", name: "Open | Matches 1-12", live: true },
         { id: "open0002", name: "Open | Matches 13-37", live: true },
@@ -87,6 +88,9 @@ describe("split events (#48)", () => {
     const rounds = await fetchOngoingRounds(http);
     expect(rounds.map((r) => r.roundId)).toEqual(["rOpen001", "rWomen01", "rClub001"]);
     expect(rounds[1]?.name).toBe("Olympiad | Women | Matches 1-25 · Round 8");
+    // Group and short names, for grouping events on the Events page (#47).
+    expect(rounds[0]).toMatchObject({ groupName: "Olympiad", groupTourName: "Open | Matches 1-12" });
+    expect(rounds[1]).toMatchObject({ groupName: "Olympiad", groupTourName: "Women | Matches 1-25" });
     // Lower match groups (Open 13-37, Women 26-50) are never fetched.
     expect(urls.some((u) => u.endsWith("/open0002") || u.endsWith("/wom00002"))).toBe(false);
   });

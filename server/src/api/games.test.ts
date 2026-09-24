@@ -14,7 +14,7 @@ const item = (id: string, result = "*"): GameListItem => ({
   white: "Gukesh, D",
   black: "Erigaisi, Arjun",
   result,
-  tournament: { id: "t1", name: "Olympiad" },
+  tournament: { id: "t1", name: "Olympiad", group: null, section: null },
   lastPly: 3,
   lastSan: "Nf3",
   whiteClock: "0:10:00",

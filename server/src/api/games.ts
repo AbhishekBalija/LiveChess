@@ -15,7 +15,9 @@ export interface GameListItem {
   white: string;
   black: string;
   result: string;
-  tournament: { id: string; name: string };
+  // `group` and `section` are set when Lichess splits the event into
+  // several tours: "46th FIDE Chess Olympiad ..." and "Open | Matches 1-12".
+  tournament: { id: string; name: string; group: string | null; section: string | null };
   lastPly: number;
   lastSan: string | null;
   // Remaining time from the PGN %clk of each side's latest move.
@@ -94,6 +96,8 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
           result: games.result,
           tournamentId: tournaments.id,
           tournamentName: tournaments.name,
+          groupName: tournaments.groupName,
+          groupTourName: tournaments.groupTourName,
           lastPly: games.lastPly,
           lastSan: moves.san,
           lastClock: moves.clock,
@@ -131,7 +135,7 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         white: r.white,
         black: r.black,
         result: r.result,
-        tournament: { id: r.tournamentId, name: r.tournamentName },
+        tournament: { id: r.tournamentId, name: r.tournamentName, group: r.groupName, section: r.groupTourName },
         lastPly: r.lastPly,
         lastSan: r.lastSan,
         ...clocksFor(r.lastPly, r.lastClock, r.prevClock),
