@@ -6,32 +6,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-24
+
+Slice 2 complete, plus a round of UX work from the owner: event grids,
+round pages, an Events tab, a thick eval bar with move navigation, a
+calmer home, split events and engine events handled, and open games
+analyzed first.
+
 ### Added
 - Events tab (`/events`): every live event with its board count (names
   wrap to two lines so events that differ only at the end, like "MA-WM
   C9" and "C11", read apart), then the rounds starting soon. The "Live
   events" list moved here from home, which now ends with the featured
   game; news will go below Starting soon once it exists.
-
-### Changed
-- Games people have open are analyzed first: the gateway tells the eval
-  worker which games have viewers, and their moves jump the queue, newest
-  first, so stepping back through a game fills in within a minute or two
-  instead of showing unanalyzed positions for hours.
-
-### Removed
-- The eval graph on the board page (owner feedback); the move list gets
-  its height back.
-
-### Changed
-- Home is calmer (#50): the card strip keeps the first 12 games and has
-  no visible scrollbar (swipe or trackpad, plus arrow buttons on desktop),
-  and the wall of boards under the featured game is replaced by a "Live
-  events" list: each event with its subtitle and live board count, one
-  click from its grid. Competition tabs keep the strip, the featured game
-  and "Watch all N boards".
-
-### Added
 - Round page (#51, `/rounds/:roundId`): "Starting soon" cards open it
   instead of Lichess. Before the start it shows the event, a big start time
   and countdown, format, time control and location, and the pairings with
@@ -48,9 +35,26 @@ and the project uses [Semantic Versioning](https://semver.org/).
     End jump to the start and back to live), or the first / previous /
     next / newest buttons. New moves do not move the board while you look
     back; "Back to live" returns. The bar follows the viewed position.
-  - An eval graph of the whole game above the moves: hover for the move
-    and eval, click to jump there. It shows how many moves the engine has
-    analyzed so far.
+- Multi-board grid (`/events/:tournamentId`): every live board of a
+  tournament at once, each tile with both players and clocks, the board,
+  the eval strip, the last move and the eval. Reached from "Watch all N
+  boards" on a competition tab on home. It refreshes every 3 seconds.
+
+### Changed
+- Games people have open are analyzed first: the gateway tells the eval
+  worker which games have viewers, and their moves jump the queue, newest
+  first, so stepping back through a game fills in within a minute or two
+  instead of showing unanalyzed positions for hours.
+- Home is calmer (#50): the card strip keeps the first 12 games and has
+  no visible scrollbar (swipe or trackpad, plus arrow buttons on desktop),
+  and the wall of boards under the featured game is replaced by a "Live
+  events" list: each event with its subtitle and live board count, one
+  click from its grid. Competition tabs keep the strip, the featured game
+  and "Watch all N boards".
+- Engine-vs-engine events (TCEC and the like) are no longer followed or
+  shown in "Starting soon" (#39): LiveChess covers human chess. They are
+  recognized by the tour name or its format ("14-engine double
+  round-robin"), since Lichess has no flag for them.
 
 ### Fixed
 - Split events are covered (#48): Lichess lists one tour per group, so the
@@ -59,18 +63,6 @@ and the project uses [Semantic Versioning](https://semver.org/).
   games frozen as live. It now also follows the first live tour of each
   other section of a group (Women next to Open). Lower match groups stay
   unfollowed so one event cannot take every slot.
-
-### Changed
-- Engine-vs-engine events (TCEC and the like) are no longer followed or
-  shown in "Starting soon" (#39): LiveChess covers human chess. They are
-  recognized by the tour name or its format ("14-engine double
-  round-robin"), since Lichess has no flag for them.
-
-### Added
-- Multi-board grid (`/events/:tournamentId`): every live board of a
-  tournament at once, each tile with both players and clocks, the board,
-  the eval strip, the last move and the eval. Reached from "Watch all N
-  boards" on a competition tab on home. It refreshes every 3 seconds.
 
 ## [0.3.0] - 2026-09-24
 
@@ -186,7 +178,8 @@ Slice 1: the live spine, verified against a live Lichess broadcast
 - Cache no longer rewinds the board on a correction to an older Ply.
 - Board rows stay equal height in sparse endgame positions.
 
-[Unreleased]: https://github.com/AbhishekBalija/LiveChess/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AbhishekBalija/LiveChess/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AbhishekBalija/LiveChess/releases/tag/v0.1.0
