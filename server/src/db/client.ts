@@ -1,7 +1,7 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import type { IngestOutcome, TruncateOutcome } from "../ingestion/handler";
+import type { IngestOutcome, ResultOutcome, TruncateOutcome } from "../ingestion/handler";
 import type { CheckpointFields } from "../publisher/publisher";
 import { games, moves, outboxEvents } from "./schema";
 import * as schema from "./schema";
@@ -148,6 +148,30 @@ export async function persistTruncateTx(
   const checkpoint: CheckpointFields = {
     fen: result.fen,
     lastPly: result.toPly,
+    lastSan: result.lastSan,
+    version: result.version,
+  };
+  await tx.insert(outboxEvents).values({
+    eventType: result.outbox.eventType,
+    payload: { gameId, ...result.outbox.payload, checkpoint },
+  });
+}
+
+// Result change: store the new Result and Version, in the caller's
+// transaction. The checkpoint keeps the board where it is. updatedAt is
+// left alone so "last move Xm ago" still means the last move.
+export async function persistResultTx(
+  tx: DbTx,
+  gameId: string,
+  result: ResultOutcome,
+): Promise<void> {
+  await tx
+    .update(games)
+    .set({ result: result.result, version: result.version })
+    .where(eq(games.id, gameId));
+  const checkpoint: CheckpointFields = {
+    fen: result.fen,
+    lastPly: result.lastPly,
     lastSan: result.lastSan,
     version: result.version,
   };

@@ -27,7 +27,7 @@ function snapshot(overrides: Partial<GameStateResponse> = {}): GameStateResponse
 }
 
 function event(overrides: Partial<LiveEvent> = {}): LiveEvent {
-  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, ...overrides }
+  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, result: null, ...overrides }
 }
 
 describe("parseLiveEvent", () => {
@@ -37,7 +37,13 @@ describe("parseLiveEvent", () => {
   it("parses string ply/version to numbers", () => {
     expect(
       parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", clock: "1:29:10", version: "3" }),
-    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3 })
+    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3, result: null })
+  })
+
+  it("parses a GameResult, which may come before any move", () => {
+    expect(
+      parseLiveEvent(GID, { type: "GameResult", gameId: GID, ply: "0", san: "", fen: "fen-0", clock: "", version: "2", result: "1-0" }),
+    ).toMatchObject({ type: "GameResult", ply: 0, version: 2, result: "1-0" })
   })
 
   it("rejects other games, non-integers, and missing fields", () => {
@@ -113,6 +119,14 @@ describe("applyEvent", () => {
   function twoPlyState(): GameState {
     return fromSnapshot(snapshot())
   }
+
+  it("applies a GameResult without touching moves, board or last move time", () => {
+    const state = { ...twoPlyState(), result: "*", lastMoveAt: 1000 }
+    const out = applyEvent(state, event({ type: "GameResult", ply: 2, san: "", fen: "fen-2", version: 3, result: "0-1" }), 9999)
+    if (!("state" in out)) throw new Error("unexpected gap")
+    expect(out.state).toMatchObject({ version: 3, result: "0-1", fen: "fen-2", lastPly: 2, lastMoveAt: 1000 })
+    expect(out.state.moves).toBe(state.moves)
+  })
 
   it("keeps White and Black at the same move number as distinct plies", () => {
     let state: GameState = { version: 0, fen: "", lastPly: 0, moves: new Map(), lastMoveAt: null }

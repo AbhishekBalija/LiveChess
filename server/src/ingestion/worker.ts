@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { envInt } from "../env";
-import { db, persistIngestResultTx, persistTruncateTx, type Db, type DbTx } from "../db/client";
+import { db, persistIngestResultTx, persistResultTx, persistTruncateTx, type Db, type DbTx } from "../db/client";
 import { games, moves, tournaments } from "../db/schema";
-import { applyMoveReceived, applyTruncate, planTruncation, type GameState } from "./handler";
+import { applyMoveReceived, applyResultChange, applyTruncate, planTruncation, type GameState } from "./handler";
 import {
   backoffMs,
   consumePgnStream,
@@ -160,8 +160,9 @@ export async function upsertGame(
     })
     .onConflictDoUpdate({
       target: [games.source, games.sourceId],
-      // Result flips from "*" to a score when the game ends.
-      set: { white, black, result, ...(roundSourceId ? { roundSourceId } : {}) },
+      // Result is only set on insert. A change on an existing game goes
+      // through ingestGame, which bumps Version and emits GameResult.
+      set: { white, black, ...(roundSourceId ? { roundSourceId } : {}) },
     })
     .returning({ id: games.id });
   if (!row) throw new Error("game upsert returned no row");
@@ -182,6 +183,8 @@ export async function ingestGame(
   database: Db,
   gameId: string,
   plies: Array<{ ply: number; san: string; fen: string; clock: string | null }>,
+  // The source's Result; omitted means leave the stored one alone.
+  result?: string,
 ): Promise<GameCounts> {
   const counts: GameCounts = { inserted: 0, corrections: 0, truncations: 0, noops: 0 };
   await database.transaction(async (tx) => {
@@ -234,6 +237,9 @@ export async function ingestGame(
       else counts.inserted += 1;
       await persistIngestResultTx(tx, gameId, outcome);
     }
+    // After the moves, so the Result lands after the move that ended it.
+    const resultChange = result === undefined ? null : applyResultChange(state, game.result, result);
+    if (resultChange) await persistResultTx(tx, gameId, resultChange);
   });
   return counts;
 }
@@ -305,7 +311,7 @@ export async function ingestPgnGame(
     result,
     roundId,
   );
-  const counts = await ingestGame(database, gameId, game.plies);
+  const counts = await ingestGame(database, gameId, game.plies, result);
   return { ...counts, sourceId, result };
 }
 

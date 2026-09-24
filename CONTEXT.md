@@ -23,7 +23,7 @@ _Avoid_: half-move record
 Time a player has left, as recorded on the ply they just made. Between plies, only the side to move's Clock runs.
 
 **Version**:
-Monotonic counter per game bumped on every new ply and every correction, the single ordering authority for jobs and resync.
+Monotonic counter per game bumped on every new ply, Correction, Truncation and Result change, the single ordering authority for jobs and resync.
 
 **Correction**:
 Same identity key with different SAN, superseding the old row without deletion.

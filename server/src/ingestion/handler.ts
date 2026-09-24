@@ -25,7 +25,7 @@ export interface IngestInput {
 }
 
 export interface OutboxRow {
-  eventType: "MoveReceived" | "GameCorrected" | "GameTruncated";
+  eventType: "MoveReceived" | "GameCorrected" | "GameTruncated" | "GameResult";
   payload: Record<string, unknown>;
 }
 
@@ -179,6 +179,45 @@ export function applyTruncate(state: GameState, toPly: number): TruncateOutcome 
     outbox: {
       eventType: "GameTruncated",
       payload: { ply: toPly, fen, version },
+    },
+  };
+}
+
+export interface ResultOutcome {
+  outcome: "result";
+  version: number;
+  result: string;
+  // Position the game ended in, for the cache checkpoint.
+  lastPly: number;
+  fen: string;
+  lastSan: string;
+  outbox: OutboxRow;
+}
+
+// The source's Result changed (usually "*" to a score when the game
+// ends). Bumps Version like any other change so clients learn about it
+// live and in order. Null when the Result is unchanged.
+export function applyResultChange(
+  state: GameState,
+  stored: string,
+  incoming: string,
+): ResultOutcome | null {
+  if (incoming === stored) return null;
+  const version = state.version + 1;
+  state.version = version;
+  const lastPly = lastLivePly(state);
+  const at = state.moves.get(lastPly);
+  const fen = at?.fen ?? START_FEN;
+  return {
+    outcome: "result",
+    version,
+    result: incoming,
+    lastPly,
+    fen,
+    lastSan: at?.san ?? "",
+    outbox: {
+      eventType: "GameResult",
+      payload: { ply: lastPly, fen, version, result: incoming },
     },
   };
 }

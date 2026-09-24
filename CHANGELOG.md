@@ -19,6 +19,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Unused `server/src/ingestion/events.ts` zod schemas.
 
 ### Added
+- Board page game-over state: a Finished badge, the winner and score in
+  place of "to move", and stopped clocks. It appears live: a Result change
+  from the source now bumps Version and emits a `GameResult` event, so an
+  open board no longer needs a reload to see the game end.
 - "Starting soon" on home: rounds starting within a week, from Lichess's
   broadcast list, with local start time and countdown (`GET /upcoming`,
   cached 5 minutes).

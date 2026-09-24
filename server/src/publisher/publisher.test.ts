@@ -208,6 +208,7 @@ describe("buildWrites for a takeback", () => {
       fen: "fen-2",
       clock: "",
       version: "6",
+      result: "",
     });
     expect(writes.cache).toEqual({ fen: "fen-2", version: "6", lastPly: "2", lastSan: "e5" });
   });

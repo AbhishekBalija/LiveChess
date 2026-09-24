@@ -21,6 +21,8 @@ export interface StreamFields extends Record<string, string> {
   // Mover's clock after this move; empty when the source has none.
   clock: string;
   version: string;
+  // Game Result, only on GameResult events; empty otherwise.
+  result: string;
 }
 
 export interface CacheFields extends Record<string, string> {
@@ -57,6 +59,7 @@ export function buildWrites(row: {
     fen: str(row.payload["fen"]),
     clock: str(row.payload["clock"]),
     version: str(row.payload["version"]),
+    result: str(row.payload["result"]),
   };
   // Cache follows the checkpoint snapshot, never the event itself, so a
   // correction to an older ply cannot rewind the cached board position.
