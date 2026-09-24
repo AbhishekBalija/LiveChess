@@ -1,6 +1,8 @@
 import { Link } from "react-router"
 import { ChevronRight } from "lucide-react"
+import { EvalBar } from "@/components/EvalBar"
 import { runningClock } from "@/lib/clock"
+import { barPercent, formatEval, listEval } from "@/lib/eval"
 import { formatMove, sideToMove, type Side } from "@/lib/ply"
 import { resultLine, splitTournamentName } from "@/lib/names"
 import type { GameListItem } from "@/types"
@@ -15,6 +17,8 @@ export function MatchCard({ game, now, className = "" }: { game: GameListItem; n
   const live = game.result === "*"
   const toMove: Side | null = live && game.lastPly > 0 ? sideToMove(game.lastPly + 1) : null
   const since = Date.parse(game.updatedAt)
+  const evalNow = listEval(game)
+  const evalText = live && evalNow ? formatEval(evalNow) : null
   const clock = (value: string | null, side: Side) =>
     runningClock(value, now !== undefined && toMove === side, Number.isNaN(since) ? null : since, now ?? 0)
   return (
@@ -30,14 +34,22 @@ export function MatchCard({ game, now, className = "" }: { game: GameListItem; n
         {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
         <PlayerRow side="white" name={game.white} clock={clock(game.whiteClock, "white")} active={toMove === "white"} />
         <PlayerRow side="black" name={game.black} clock={clock(game.blackClock, "black")} active={toMove === "black"} />
-        {live ? (
-          <span className="text-[13px] font-bold text-primary">
-            Live{game.lastSan ? ` · ${formatMove(game.lastPly, game.lastSan)}` : " · not started"}
-          </span>
-        ) : (
-          <span className="text-[13px] font-bold text-win">{resultLine(game.result, game.white, game.black)}</span>
-        )}
+        <div className="flex items-center justify-between gap-2.5">
+          {live ? (
+            <span className="text-[13px] font-bold text-primary">
+              Live{game.lastSan ? ` · ${formatMove(game.lastPly, game.lastSan)}` : " · not started"}
+            </span>
+          ) : (
+            <span className="text-[13px] font-bold text-win">{resultLine(game.result, game.white, game.black)}</span>
+          )}
+          {evalText && <span className="font-mono text-xs text-muted-foreground">{evalText}</span>}
+        </div>
       </div>
+      <EvalBar
+        whitePercent={barPercent(game.result, evalNow, game.lastPly)}
+        label={evalText}
+        className="mt-auto h-1"
+      />
     </Link>
   )
 }

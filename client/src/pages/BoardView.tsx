@@ -6,7 +6,8 @@ import { ChessBoard } from "@/components/ChessBoard"
 import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
-import { currentEval, formatEval } from "@/lib/eval"
+import { EvalBar } from "@/components/EvalBar"
+import { barPercent, currentEval, formatEval } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
 import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
 import { resultLine, splitTournamentName } from "@/lib/names"
@@ -74,9 +75,9 @@ export function BoardView() {
     black: runningClock(lastClocks.black, running && toMove === "black", state.lastMoveAt, now),
   }
   // Engine eval of the current position (ADR 0006), once the worker has it.
-  // Not shown for a finished game: the result says it all.
-  const evalNow = finished ? null : currentEval(state)
-  const evalText = evalNow ? `Eval ${formatEval(evalNow)}` : null
+  // A finished game's bar shows the result instead, with no number.
+  const evalNow = currentEval(state)
+  const evalText = !finished && evalNow ? formatEval(evalNow) : null
   const white = state.white ?? "White"
   const black = state.black ?? "Black"
   const statusText = finished
@@ -104,7 +105,6 @@ export function BoardView() {
           <div className="flex flex-col items-center gap-2 text-center">
             <LiveBadge status={status} lastMoveAgo={lastMoveAgo} finished={finished} />
             <span className={`text-xl font-bold lg:text-[26px] ${finished ? "text-win" : "text-gold"}`}>{statusText}</span>
-            {evalText && <span className="font-mono text-sm font-semibold text-muted-foreground">{evalText}</span>}
           </div>
           <ScoreSide side="black" name={black} clock={clocks.black} active={!finished && toMove === "black"} align="right" />
         </section>
@@ -116,12 +116,19 @@ export function BoardView() {
           {/* Desktop: never taller than the screen under the scoreboard. */}
           <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
             <ChessBoard fen={state.fen} highlight={highlight} palette={palette} />
+            <div className="mt-2.5 flex items-center gap-3 md:mt-3.5">
+              <EvalBar
+                whitePercent={barPercent(state.result, evalNow, state.lastPly)}
+                label={evalText}
+                className="h-1.5 flex-1 rounded-full"
+              />
+              {evalText && (
+                <span className="w-12 text-right font-mono text-xs font-semibold text-muted-foreground">{evalText}</span>
+              )}
+            </div>
           </div>
           <PhonePlayer side="white" name={white} clock={clocks.white} active={!finished && toMove === "white"} />
-          <p className={`flex justify-between gap-3 px-5 pt-1 text-sm font-bold md:hidden ${finished ? "text-win" : "text-gold"}`}>
-            <span>{statusText}</span>
-            {evalText && <span className="font-mono font-semibold text-muted-foreground">{evalText}</span>}
-          </p>
+          <p className={`px-5 pt-1 text-sm font-bold md:hidden ${finished ? "text-win" : "text-gold"}`}>{statusText}</p>
         </div>
 
         <section aria-labelledby="moves-heading" className="flex min-w-0 flex-col gap-4 px-4 md:px-0">

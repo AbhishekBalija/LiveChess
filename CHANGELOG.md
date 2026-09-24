@@ -12,8 +12,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Stockfish at a fixed node count (`EVAL_NODES`), or asks the Lichess
   tablebase for positions with 7 pieces or fewer. Newest moves go first,
   older ones are filled in after. Evals are stored on the move, pushed live
-  as `EvalUpdated` events, returned by resync, and the board page shows the
-  current one ("Eval +0.4", "#3").
+  as `EvalUpdated` events, and returned by resync and the games list.
+- Win-probability bars from the Matchday design: a 6px bar under the board
+  and a 4px strip along each home match card, White's share filling from
+  the left (the same curve Lichess uses), with the eval ("+0.4", "#3")
+  beside it. Finished games show their result on the bar.
 
 ## [0.2.0] - 2026-09-24
 

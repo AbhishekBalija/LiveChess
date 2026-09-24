@@ -44,6 +44,9 @@ Its to-do list is a query: live moves with no eval yet, a game's newest move fir
 **Q: The eval worker publishes events too. Why does an eval not bump the game's Version?**
 Version orders changes to the game itself, and a gap in it makes the client resync. Evals arrive late and out of order by design (newest move first, older ones backfilled), so putting them on Version would make clients see "gaps" and resync all the time over something that did not change the game at all. Instead, the eval event names the move row's own Version, and the client only attaches it to that exact move: an eval computed for a move that was later corrected is simply ignored. The trade-off is that resync cannot find missed evals by version, so it returns the game's stored evals separately.
 
+**Q: How do you turn a centipawn eval into a win-probability bar?**
+Centipawns are not a percentage: +1 pawn in a level middlegame and +1 pawn when already +8 mean very different things. The bar runs the eval through a logistic curve (the one Lichess uses: `50 + 50 * (2 / (1 + e^(-0.00368 * cp)) - 1)`, with cp clamped at plus or minus 1000), so small edges move the bar a little and big ones saturate near the ends. A forced mate or a tablebase win fills it completely, and a finished game shows its result instead.
+
 ## Ply vs move number
 
 **Q: Why is move identity keyed on ply and not move number?**

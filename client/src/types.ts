@@ -54,6 +54,9 @@ export interface GameListItem {
   fen: string
   version: number
   updatedAt: string
+  // Eval of the current position from White's side, null until analyzed.
+  evalCp: number | null
+  evalMate: number | null
 }
 
 // One row of GET /upcoming (server/src/api/upcoming.ts).

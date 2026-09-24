@@ -83,7 +83,8 @@ Nothing new for fans; make what exists trustworthy and public.
       first then backfill, stored per move and pushed live, with the
       current eval shown on the board page (ADR 0006, research in
       `docs/research/eval-options.md`)
-- Win-probability bar from eval
+- [x] Win-probability bar from eval: under the board and on home match
+      cards, as in the Matchday design
 - Multi-board grid: watch a whole round at once
 
 ## Slice 3: AI coverage
