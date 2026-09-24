@@ -62,16 +62,23 @@ export function EventBoards() {
             </Link>
           </p>
         ) : (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
-            {boards.map((g) => (
-              <li key={g.id}>
-                <GridTile game={g} now={now} />
-              </li>
-            ))}
-          </ul>
+          <BoardGrid games={boards} now={now} />
         )}
       </main>
     </AppShell>
+  )
+}
+
+// The grid of tiles, shared with the round page.
+export function BoardGrid({ games, now }: { games: GameListItem[]; now: number }) {
+  return (
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
+      {games.map((g) => (
+        <li key={g.id}>
+          <GridTile game={g} now={now} />
+        </li>
+      ))}
+    </ul>
   )
 }
 

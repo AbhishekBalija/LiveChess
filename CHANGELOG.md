@@ -15,6 +15,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and "Watch all N boards".
 
 ### Added
+- Round page (#51, `/rounds/:roundId`): "Starting soon" cards open it
+  instead of Lichess. Before the start it shows the event, a big start time
+  and countdown, format, time control and location, and the pairings with
+  titles, ratings and federations once published. When LiveChess has the
+  round's games, the same page is the live board grid. If Lichess plays the
+  round but LiveChess isn't following it, it says so and links to Lichess.
+  New `GET /rounds/:roundId` (Lichess round info, cached 2 minutes) and a
+  `roundId` on each games-list row.
 - Board page (#49):
   - A thick eval bar exactly the board's width, saying who is better in
     words ("Black is better -2.6", "White mates in 3", "White won") on the
