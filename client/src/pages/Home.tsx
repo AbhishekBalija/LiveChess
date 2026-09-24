@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router"
+import { LayoutGrid } from "lucide-react"
 import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
@@ -62,6 +63,15 @@ export function Home() {
           <p role="status" className="px-4 text-sm text-destructive md:px-8 lg:px-12">
             Can't reach server, retrying...
           </p>
+        )}
+        {tab.tournamentId && (
+          <Link
+            to={`/events/${tab.tournamentId}`}
+            className="mx-4 -mb-2 flex w-fit items-center gap-2 rounded-full border border-line-strong px-4 py-2.5 text-sm font-semibold text-foreground hover:border-primary md:mx-8 lg:mx-12"
+          >
+            <LayoutGrid className="size-4" aria-hidden />
+            Watch all {live.games?.filter((g) => g.tournament.id === tab.tournamentId).length ?? 0} boards
+          </Link>
         )}
         {tab.finished ? (
           <FinishedGames />

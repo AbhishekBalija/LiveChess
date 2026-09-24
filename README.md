@@ -22,6 +22,7 @@ broadcasts. "CREX, but for chess."
 - **Ticking clocks**: the side to move's clock runs between moves, from each player's real `%clk`.
 - **Follows Lichess by itself**: a supervisor picks up every live broadcast round, streams it, and stores every result when it ends.
 - **Engine eval**: every move is analyzed by Stockfish on the server (endgames with 7 pieces or fewer come exact from the Lichess tablebase), and a win-probability bar under each board and on every match card swings as the eval changes.
+- **Watch a whole round**: every live board of an event in one grid, each with its clocks, eval strip and last move.
 - **Starting soon**: upcoming rounds with local start times and countdowns.
 - **Built for patchy mobile data**: resync by version after any gap, reconnect with backoff, takebacks and corrections handled.
 - **Each game its own board**: six board palettes, picked per game so a page of boards never looks the same.

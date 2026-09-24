@@ -6,6 +6,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Multi-board grid (`/events/:tournamentId`): every live board of a
+  tournament at once, each tile with both players and clocks, the board,
+  the eval strip, the last move and the eval. Reached from "Watch all N
+  boards" on a competition tab on home. It refreshes every 3 seconds.
+
 ## [0.3.0] - 2026-09-24
 
 Engine eval: every live move analyzed on the server, with win-probability
