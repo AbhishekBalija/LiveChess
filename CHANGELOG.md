@@ -7,11 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
-- Home no longer shows every live game twice: the card strip keeps the
-  first 12, and "More live boards" becomes a short section per event (4
-  boards on desktop, 2 on phones; up to 8 on a competition tab) with
-  "Watch all" into that event's grid. Headings carry the event's subtitle,
-  so the tours Lichess splits one event into can be told apart.
+- Home is calmer (#50): the card strip keeps the first 12 games and has
+  no visible scrollbar (swipe or trackpad, plus arrow buttons on desktop),
+  and the wall of boards under the featured game is replaced by a "Live
+  events" list: each event with its subtitle and live board count, one
+  click from its grid. Competition tabs keep the strip, the featured game
+  and "Watch all N boards".
 
 ### Added
 - Board page (#49):

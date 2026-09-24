@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router"
-import { LayoutGrid } from "lucide-react"
+import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react"
 import { AppShell } from "@/components/AppShell"
 import { ChessBoard } from "@/components/ChessBoard"
 import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
@@ -15,13 +15,11 @@ import type { GameListItem } from "@/types"
 
 // Home (issue #19, Matchday design). What is live comes first: a tab row
 // of competitions, a sideways strip of scoreboard cards, the featured
-// game, then a few boards per event with a link to the full grid. With
-// 200 live games, showing every board here was a wall of boards.
+// game, then (on All live) a list of the events being played, each one
+// click away from its grid. Boards themselves live in the grids.
 
-// How much of a long live list home shows before pointing to the grid.
+// How many scoreboard cards the strip holds before the grid takes over.
 const STRIP_CARDS = 12
-const BOARDS_PER_EVENT = 4
-const BOARDS_ONE_EVENT = 8
 
 type Tab = { id: string; label: string; tournamentId?: string; finished?: boolean }
 
@@ -122,7 +120,7 @@ function LiveGames({
       </>
     )
   }
-  const [featured, ...rest] = games
+  const [featured] = games
   return (
     <>
       <Strip>
@@ -132,55 +130,54 @@ function LiveGames({
       </Strip>
       {startingSoon}
       {featured && <Featured game={featured} />}
-      {byEvent(rest).map((event) => (
-        <EventBoardsPreview
-          key={event.id}
-          event={event}
-          heading={oneEvent ? "More live boards" : event.name}
-          limit={oneEvent ? BOARDS_ONE_EVENT : BOARDS_PER_EVENT}
-        />
-      ))}
+      {!oneEvent && <LiveEvents games={games} />}
     </>
   )
 }
 
-type EventGroup = { id: string; name: string; subtitle: string | null; games: GameListItem[] }
+type EventGroup = { id: string; name: string; subtitle: string | null; count: number }
 
 // Live games grouped by event, biggest event first.
 function byEvent(games: GameListItem[]): EventGroup[] {
   const groups = new Map<string, EventGroup>()
   for (const g of games) {
+    const group = groups.get(g.tournament.id)
+    if (group) {
+      group.count += 1
+      continue
+    }
     const { title, subtitle } = splitTournamentName(g.tournament.name)
-    const group = groups.get(g.tournament.id) ?? { id: g.tournament.id, name: title, subtitle, games: [] }
-    group.games.push(g)
-    groups.set(g.tournament.id, group)
+    groups.set(g.tournament.id, { id: g.tournament.id, name: title, subtitle, count: 1 })
   }
-  return [...groups.values()].sort((a, b) => b.games.length - a.games.length)
+  return [...groups.values()].sort((x, y) => y.count - x.count)
 }
 
-// A few boards of one event, and a link to all of them in the grid.
-// The subtitle tells apart events Lichess splits into several tours
-// (an Olympiad's "Open · Matches 1-12" and "Matches 63-87").
-function EventBoardsPreview({ event, heading, limit }: { event: EventGroup; heading: string; limit: number }) {
-  const shown = event.games.slice(0, limit)
-  const headingId = `event-${event.id}`
+// Every event being played, one click from its grid of boards. The
+// subtitle tells apart events Lichess splits into several tours.
+function LiveEvents({ games }: { games: GameListItem[] }) {
+  const events = byEvent(games)
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 id={headingId} className="flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-3">
-          <span className="truncate text-[17px] font-bold md:text-lg">{heading}</span>
-          {event.subtitle && <span className="truncate text-sm text-muted-foreground">{event.subtitle}</span>}
-        </h2>
-        <Link to={`/events/${event.id}`} className="shrink-0 text-sm font-semibold whitespace-nowrap">
-          Watch all
-        </Link>
-      </div>
-      <ul className="grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
-        {shown.map((g, i) => (
-          // Below desktop each event shows one row of two boards; the rest
-          // are one tap away in the grid.
-          <li key={g.id} className={i >= 2 && limit === BOARDS_PER_EVENT ? "hidden lg:block" : undefined}>
-            <BoardTile game={g} />
+    <section aria-labelledby="live-events" className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
+      <h2 id="live-events" className="text-[17px] font-bold md:text-lg">
+        Live events
+      </h2>
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {events.map((event) => (
+          <li key={event.id} className="min-w-0">
+            <Link
+              to={`/events/${event.id}`}
+              className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3.5 transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-[15px] font-bold">{event.name}</span>
+                {event.subtitle && <span className="truncate text-sm text-muted-foreground">{event.subtitle}</span>}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary">
+                <span aria-hidden className="size-2 rounded-full bg-live" />
+                {event.count} {event.count === 1 ? "board" : "boards"}
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            </Link>
           </li>
         ))}
       </ul>
@@ -232,11 +229,53 @@ function StartingSoon() {
   )
 }
 
-// Sideways strip; bleeds to the screen edge so a cut-off card hints at more.
+// Sideways strip; bleeds to the screen edge so a cut-off card hints at
+// more. No visible scrollbar: touch and trackpads swipe, and desktop gets
+// arrow buttons at either end while there is more to see that way.
 function Strip({ children }: { children: ReactNode }) {
+  const scroller = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ start: true, end: true })
+
+  const measure = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    setEdges({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 })
+  }, [])
+
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [measure])
+
+  const page = (direction: 1 | -1) => {
+    const el = scroller.current
+    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" })
+  }
+
+  const arrow =
+    "absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-line-strong bg-background/90 text-foreground shadow-lg backdrop-blur hover:border-primary md:flex"
   return (
-    <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] md:scroll-px-8 md:gap-4 md:px-8 lg:scroll-px-12 lg:px-12">
-      {children}
+    <div className="relative">
+      <div
+        ref={scroller}
+        onScroll={measure}
+        className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:scroll-px-8 md:gap-4 md:px-8 lg:scroll-px-12 lg:px-12 [&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </div>
+      {!edges.start && (
+        <button type="button" aria-label="Scroll left" onClick={() => page(-1)} className={`${arrow} left-3 lg:left-5`}>
+          <ChevronLeft className="size-5" aria-hidden />
+        </button>
+      )}
+      {!edges.end && (
+        <button type="button" aria-label="Scroll right" onClick={() => page(1)} className={`${arrow} right-3 lg:right-5`}>
+          <ChevronRight className="size-5" aria-hidden />
+        </button>
+      )}
     </div>
   )
 }
@@ -269,23 +308,5 @@ function Featured({ game }: { game: GameListItem }) {
         </div>
       </Link>
     </section>
-  )
-}
-
-function BoardTile({ game }: { game: GameListItem }) {
-  return (
-    <Link
-      to={`/games/${game.id}`}
-      className="flex flex-col gap-2 rounded-lg p-0 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:gap-3 md:bg-card md:p-4 md:hover:bg-secondary/60"
-    >
-      <ChessBoard fen={game.fen || undefined} palette={paletteFor(game.id)} coords={false} />
-      <div className="flex min-w-0 flex-col gap-0.5 md:gap-1">
-        <span className="truncate text-xs font-semibold md:text-sm md:font-bold">{game.white}</span>
-        <span className="hidden truncate text-sm text-muted-foreground md:block">{game.black}</span>
-        <span className="font-display text-[15px] font-bold text-primary md:text-lg">
-          {game.lastSan ? formatMove(game.lastPly, game.lastSan) : "Not started"}
-        </span>
-      </div>
-    </Link>
   )
 }
