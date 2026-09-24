@@ -13,6 +13,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Cards flow in columns so there are no gaps. Events store their Lichess
   group name and short tour name (migration 0008), saved by the
   supervisor's discovery; the games list returns them with each game.
+- Home's competition tabs follow the same grouping (#47): one tab per
+  event, showing every tour's live games, a grid link per tour, and the
+  best featured pick among its tours.
 
 ### Added
 - Featured game picks the most exciting live game (#52). Every live game
