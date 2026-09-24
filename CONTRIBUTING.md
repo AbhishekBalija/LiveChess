@@ -50,6 +50,17 @@ Describe what changed, why, and how to test it, and add screenshots for
 UI changes (the template asks for these). Keep pull requests focused on one
 change.
 
+## Releases
+
+LiveChess uses [Semantic Versioning](https://semver.org/) and stays on
+0.x while it is pre-1.0: a minor bump for a finished slice or a notable
+set of features, a patch bump for fixes only. A release is a
+`chore/release-X.Y.Z` pull request that moves the Unreleased entries in
+CHANGELOG.md into a dated section and sets `version` in the three
+`package.json` files. After it merges, the merge commit is tagged
+`vX.Y.Z` and published as a GitHub release with that changelog section
+as its notes.
+
 ## Code of conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
