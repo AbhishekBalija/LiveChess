@@ -161,3 +161,14 @@ export function broadcastSlugs(
   if (!match) return null;
   return { tourSlug: match[1] as string, roundSlug: match[2] as string };
 }
+
+// Engine-vs-engine events (TCEC and the like) are broadcast on Lichess
+// next to human ones. LiveChess covers human chess only (#39), so the
+// supervisor and "Starting soon" skip them. Lichess has no flag for it;
+// the tour name or its format ("14-engine double round-robin") tells.
+const ENGINE_EVENT = /\b(engines?|tcec|ccc|computer chess)\b/i;
+
+export function isEngineEvent(tour: { name?: unknown; info?: { format?: unknown } } | undefined): boolean {
+  const text = `${String(tour?.name ?? "")} ${String(tour?.info?.format ?? "")}`;
+  return ENGINE_EVENT.test(text);
+}

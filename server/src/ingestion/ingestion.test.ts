@@ -5,6 +5,7 @@ import {
   broadcastSlugs,
   fensForSans,
   gameSourceId,
+  isEngineEvent,
   parseBroadcastGame,
   parseMovetext,
   splitPgnGames,
@@ -238,5 +239,16 @@ describe("result changes", () => {
     const state = emptyGame();
     expect(applyResultChange(state, "1-0", "1-0")).toBeNull();
     expect(state.version).toBe(0);
+  });
+});
+
+describe("isEngineEvent (#39)", () => {
+  it("spots engine events by name or format, and leaves human events alone", () => {
+    expect(isEngineEvent({ name: "TCEC S30: Playoff & Swiss 10 | Playoff | Cat 1" })).toBe(true);
+    expect(isEngineEvent({ name: "Some Cup", info: { format: "14-engine double round-robin" } })).toBe(true);
+    expect(isEngineEvent({ name: "Chess.com CCC 24" })).toBe(true);
+    expect(isEngineEvent({ name: "46th FIDE Chess Olympiad", info: { format: "11-round swiss for teams" } })).toBe(false);
+    expect(isEngineEvent({ name: "Engineers Club Open" })).toBe(false);
+    expect(isEngineEvent(undefined)).toBe(false);
   });
 });

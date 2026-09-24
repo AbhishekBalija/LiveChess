@@ -1,4 +1,5 @@
 import type { HttpPort } from "../ingestion/worker";
+import { isEngineEvent } from "../ingestion/lichess";
 import { TOP_URL } from "../ingestion/supervisor";
 
 // "Starting soon" for the home page: rounds that have not started yet,
@@ -15,7 +16,7 @@ export interface UpcomingRound {
   url: string | null;
 }
 
-type Entry = { tour?: { name?: unknown }; round?: { id?: unknown; name?: unknown; startsAt?: unknown; ongoing?: unknown; url?: unknown } };
+type Entry = { tour?: { name?: unknown; info?: { format?: unknown } }; round?: { id?: unknown; name?: unknown; startsAt?: unknown; ongoing?: unknown; url?: unknown } };
 
 export const UPCOMING_LIMIT = 12;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,6 +30,7 @@ export function pickUpcoming(entries: Entry[], now: number): UpcomingRound[] {
     const id = e.round?.id;
     const at = e.round?.startsAt;
     if (typeof id !== "string" || typeof at !== "number" || e.round?.ongoing === true) continue;
+    if (isEngineEvent(e.tour)) continue;
     if (at <= now || at > now + WEEK_MS || seen.has(id)) continue;
     seen.add(id);
     out.push({

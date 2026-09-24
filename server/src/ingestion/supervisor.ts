@@ -2,6 +2,7 @@ import { and, isNotNull, eq, lt, sql } from "drizzle-orm";
 import { envInt } from "../env";
 import { db, type Db } from "../db/client";
 import { games } from "../db/schema";
+import { isEngineEvent } from "./lichess";
 import { fetchStream, type StreamPort } from "./stream";
 import {
   announceLichessAuth,
@@ -36,12 +37,15 @@ export async function fetchOngoingRounds(http: HttpPort): Promise<OngoingRound[]
   const res = await http.get(TOP_URL, "application/json");
   if (!res.ok) throw new Error(`broadcast list failed with ${res.status}`);
   const body = (await res.json()) as {
-    active?: Array<{ tour?: { name?: unknown }; round?: { id?: unknown; name?: unknown; ongoing?: unknown } }>;
+    active?: Array<{
+      tour?: { name?: unknown; info?: { format?: unknown } };
+      round?: { id?: unknown; name?: unknown; ongoing?: unknown };
+    }>;
   };
   const out: OngoingRound[] = [];
   for (const b of body.active ?? []) {
     const id = b.round?.id;
-    if (typeof id !== "string" || b.round?.ongoing !== true) continue;
+    if (typeof id !== "string" || b.round?.ongoing !== true || isEngineEvent(b.tour)) continue;
     out.push({ roundId: id, name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}` });
   }
   return out;
