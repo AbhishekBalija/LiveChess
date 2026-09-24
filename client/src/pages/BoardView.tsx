@@ -8,7 +8,7 @@ import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
 import { EvalBar } from "@/components/EvalBar"
 import { useMoveBrowser, type MoveBrowser } from "@/lib/browse"
-import { barPercent, evalWords, formatEval, resultWords } from "@/lib/eval"
+import { barPercent, evalAt, evalWords, formatEval, resultWords } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
 import { clocksOf, type GameState, type LiveMove, type MoveEval } from "@/lib/game"
 import { resultLine, splitTournamentName } from "@/lib/names"
@@ -80,9 +80,10 @@ export function BoardView() {
     white: runningClock(lastClocks.white, running && toMove === "white", state.lastMoveAt, now),
     black: runningClock(lastClocks.black, running && toMove === "black", state.lastMoveAt, now),
   }
-  // Engine eval of the position on the board (ADR 0006), once the worker
-  // has it. At the end of a finished game the bar shows the result.
-  const evalNow = state.moves.get(viewed)?.eval ?? null
+  // Engine eval of the position on the board (ADR 0006), or the last
+  // analyzed one while the worker catches up. At the end of a finished
+  // game the bar shows the result.
+  const evalNow = evalAt(state, viewed)
   const showResult = finished && !browser.browsing
   const evalText = !showResult && evalNow ? formatEval(evalNow) : null
   const white = state.white ?? "White"

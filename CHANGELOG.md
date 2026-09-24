@@ -32,6 +32,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Lichess tier and FIDE time control class (migration 0007).
 
 ### Fixed
+- Eval bar no longer jumps to the middle after every move. A new move
+  has no eval for a second or so; the board page and home cards now keep
+  the last analyzed eval until it lands (board page looks back up to 4
+  plies, so a stuck eval worker still shows "pending").
 - The supervisor's startup sweep no longer pulls stale engine-event rounds
   again (#39 follow-up).
 
