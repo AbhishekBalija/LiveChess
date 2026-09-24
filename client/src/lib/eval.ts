@@ -20,9 +20,20 @@ export function formatEval(e: MoveEval): string {
   return cp > 0 ? `+${pawns}` : `-${pawns}`
 }
 
-// Eval of the position on the board right now, once the worker has it.
-export function currentEval(state: GameState): MoveEval | null {
-  return state.moves.get(state.lastPly)?.eval ?? null
+// How many plies back the bar may borrow an eval from while the newest
+// position is still being analyzed. Enough for a quick exchange, short
+// enough that a stuck eval worker shows "pending" instead of an old eval.
+const EVAL_LOOKBACK_PLIES = 4
+
+// Eval for the position at `ply`. A fresh move has no eval for a second
+// or so; showing the last analyzed position meanwhile keeps the bar from
+// jumping to the middle and back on every move.
+export function evalAt(state: GameState, ply: number): MoveEval | null {
+  for (let p = ply; p >= Math.max(0, ply - EVAL_LOOKBACK_PLIES); p--) {
+    const e = state.moves.get(p)?.eval
+    if (e) return e
+  }
+  return null
 }
 
 // White's share of the eval bar, 0 to 100. Centipawns go through the same

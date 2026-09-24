@@ -104,6 +104,8 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
           prevClock: prev.clock,
           evalCp: moves.evalCp,
           evalMate: moves.evalMate,
+          prevEvalCp: prev.evalCp,
+          prevEvalMate: prev.evalMate,
           roundId: games.roundSourceId,
           fen: games.currentFen,
           version: games.version,
@@ -142,8 +144,11 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         fen: r.fen,
         version: r.version,
         updatedAt: r.updatedAt.toISOString(),
-        evalCp: r.evalCp,
-        evalMate: r.evalMate,
+        // The newest move is unanalyzed for a second or so; the previous
+        // ply's eval keeps home cards' bars from jumping to the middle.
+        ...(r.evalCp === null && r.evalMate === null
+          ? { evalCp: r.prevEvalCp, evalMate: r.prevEvalMate }
+          : { evalCp: r.evalCp, evalMate: r.evalMate }),
         roundId: r.roundId,
       }));
   }

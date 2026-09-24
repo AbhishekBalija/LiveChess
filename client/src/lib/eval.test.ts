@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { barPercent, evalWords, formatEval, whiteWinPercent } from "./eval"
+import type { GameState, LiveMove } from "./game"
+import { barPercent, evalAt, evalWords, formatEval, whiteWinPercent } from "./eval"
 
 describe("formatEval", () => {
   it("shows pawns with one decimal from White's side", () => {
@@ -53,5 +54,24 @@ describe("evalWords", () => {
     expect(evalWords({ cp: null, mate: 3 })).toBe("White mates in 3")
     expect(evalWords({ cp: null, mate: -1 })).toBe("Black mates in 1")
     expect(evalWords({ cp: null, mate: 0 })).toBe("Checkmate")
+  })
+})
+
+describe("evalAt", () => {
+  const stateWith = (evals: Record<number, number | undefined>) => {
+    const moves = new Map<number, LiveMove>()
+    for (const [ply, cp] of Object.entries(evals)) {
+      moves.set(Number(ply), { ply: Number(ply), eval: cp === undefined ? undefined : { cp, mate: null } } as LiveMove)
+    }
+    return { moves } as GameState
+  }
+
+  it("keeps the last analyzed eval while a new move is being analyzed", () => {
+    expect(evalAt(stateWith({ 10: -300, 11: undefined }), 11)).toEqual({ cp: -300, mate: null })
+    expect(evalAt(stateWith({ 10: -300, 11: -280 }), 11)).toEqual({ cp: -280, mate: null })
+  })
+
+  it("gives up after a few plies so a stuck worker shows pending", () => {
+    expect(evalAt(stateWith({ 1: 50, 6: undefined, 7: undefined, 8: undefined }), 8)).toBeNull()
   })
 })
