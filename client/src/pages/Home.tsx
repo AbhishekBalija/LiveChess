@@ -15,8 +15,8 @@ import type { GameListItem } from "@/types"
 
 // Home (issue #19, Matchday design). What is live comes first: a tab row
 // of competitions, a sideways strip of scoreboard cards, the featured
-// game, then (on All live) a list of the events being played, each one
-// click away from its grid. Boards themselves live in the grids.
+// game. The list of events lives on the Events page; news will join home
+// below Starting soon (Slice 5).
 
 // How many scoreboard cards the strip holds before the grid takes over.
 const STRIP_CARDS = 12
@@ -83,7 +83,6 @@ export function Home() {
           <LiveGames
             games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null}
             startingSoon={tab.id === "live" ? <StartingSoon /> : null}
-            oneEvent={Boolean(tab.tournamentId)}
           />
         )}
       </main>
@@ -94,11 +93,9 @@ export function Home() {
 function LiveGames({
   games,
   startingSoon,
-  oneEvent,
 }: {
   games: GameListItem[] | null
   startingSoon: ReactNode
-  oneEvent: boolean
 }) {
   const now = useNow()
   if (games === null) {
@@ -130,58 +127,7 @@ function LiveGames({
       </Strip>
       {startingSoon}
       {featured && <Featured game={featured} />}
-      {!oneEvent && <LiveEvents games={games} />}
     </>
-  )
-}
-
-type EventGroup = { id: string; name: string; subtitle: string | null; count: number }
-
-// Live games grouped by event, biggest event first.
-function byEvent(games: GameListItem[]): EventGroup[] {
-  const groups = new Map<string, EventGroup>()
-  for (const g of games) {
-    const group = groups.get(g.tournament.id)
-    if (group) {
-      group.count += 1
-      continue
-    }
-    const { title, subtitle } = splitTournamentName(g.tournament.name)
-    groups.set(g.tournament.id, { id: g.tournament.id, name: title, subtitle, count: 1 })
-  }
-  return [...groups.values()].sort((x, y) => y.count - x.count)
-}
-
-// Every event being played, one click from its grid of boards. The
-// subtitle tells apart events Lichess splits into several tours.
-function LiveEvents({ games }: { games: GameListItem[] }) {
-  const events = byEvent(games)
-  return (
-    <section aria-labelledby="live-events" className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
-      <h2 id="live-events" className="text-[17px] font-bold md:text-lg">
-        Live events
-      </h2>
-      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {events.map((event) => (
-          <li key={event.id} className="min-w-0">
-            <Link
-              to={`/events/${event.id}`}
-              className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3.5 transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-[15px] font-bold">{event.name}</span>
-                {event.subtitle && <span className="truncate text-sm text-muted-foreground">{event.subtitle}</span>}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary">
-                <span aria-hidden className="size-2 rounded-full bg-live" />
-                {event.count} {event.count === 1 ? "board" : "boards"}
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 

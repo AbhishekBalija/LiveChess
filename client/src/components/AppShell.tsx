@@ -5,7 +5,7 @@ import { CalendarDays, Radio, Search, Trophy, Users, type LucideIcon } from "luc
 // App chrome (issue #19). Desktop: one top bar with the logo, main nav
 // and search. Phone: a slim header plus a bottom tab bar; the game page
 // turns the phone chrome off because it has its own back header.
-// Events, Players, Rankings and Search arrive in later slices, so they
+// Players, Rankings and Search arrive in later slices, so they
 // show as "coming soon" instead of linking to pages that do not exist.
 
 interface NavItem {
@@ -16,7 +16,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { label: "Live", icon: Radio, to: "/" },
-  { label: "Events", icon: CalendarDays },
+  { label: "Events", icon: CalendarDays, to: "/events" },
   { label: "Players", icon: Users },
   { label: "Rankings", icon: Trophy },
 ]

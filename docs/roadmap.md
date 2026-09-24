@@ -110,7 +110,9 @@ Nothing new for fans; make what exists trustworthy and public.
 
 - Players table and profiles
 - FIDE ratings from the official monthly download
-- News feed plus auto recaps from Slice 3
+- News feed plus auto recaps from Slice 3. On home, news sits below
+  Starting soon (owner's layout call); the list of live events lives on
+  the Events tab
 
 ## Slice 6: Engagement
 

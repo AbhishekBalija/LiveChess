@@ -6,6 +6,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Events tab (`/events`): every live event with its board count (names
+  wrap to two lines so events that differ only at the end, like "MA-WM
+  C9" and "C11", read apart), then the rounds starting soon. The "Live
+  events" list moved here from home, which now ends with the featured
+  game; news will go below Starting soon once it exists.
+
 ### Changed
 - Games people have open are analyzed first: the gateway tells the eval
   worker which games have viewers, and their moves jump the queue, newest
