@@ -173,7 +173,7 @@ This keeps the LLM as a bounded cost, not a per-move expense.
 3. **Missed Redis publish** (crash between commit and XADD) — outbox row stays unpublished → picked up on next poll, no data lost.
 4. **Redis restart** — current-state cache rebuilt lazily from Postgres checkpoint; stream resumes from wherever the outbox publisher left off.
 5. **Client reconnect** — sequence gap detected → resync endpoint called → authoritative state + version returned.
-6. **Stale eval result** — the move row it was computed for was superseded (Correction or Truncation) → result discarded (ADR 0006).
+6. **Stale eval result**: the move row it was computed for was superseded (Correction or Truncation) → result discarded (ADR 0006).
 7. **LLM failure** — commentary job retries via BullMQ backoff; after max retries, dropped; live path unaffected.
 8. **Game correction** — notation mismatch on same identity key → `GameCorrected`, version bump → in-flight jobs on the old version discarded (same mechanism as #6).
 9. **Two ingestion workers, same event** — unique constraint on identity key rejects the second insert — same handling as duplicate.
