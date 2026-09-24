@@ -19,6 +19,11 @@ function wsUrl(api: string): string {
   return url.toString()
 }
 
+// The gateway sends a heartbeat every 25s. Nothing at all for this long
+// means the socket is dead even if the browser still says it is open
+// (phone switched networks, laptop slept).
+const SILENCE_MS = 60_000
+
 export type ConnectionStatus = "loading" | "live" | "reconnecting" | "error"
 
 export interface UseLiveGame {
@@ -50,6 +55,7 @@ export function useLiveGame(gameId: string): UseLiveGame {
     let dead = false
     let socket: WebSocket | null = null
     let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let silenceTimer: ReturnType<typeof setTimeout> | undefined
     let attempts = 0
     let snapshotReady = false
     let inflight: Promise<void> | null = null
@@ -146,6 +152,18 @@ export function useLiveGame(gameId: string): UseLiveGame {
       if (current.state === null && attempts === 0) setStatus("loading")
       const ws = new WebSocket(wsUrl(API_URL))
       socket = ws
+      // Closing a dead socket can take a long time to fire onclose, so
+      // detach it first and reconnect right away.
+      const resetSilence = (): void => {
+        if (silenceTimer) clearTimeout(silenceTimer)
+        silenceTimer = setTimeout(() => {
+          if (socket !== ws) return
+          socket = null
+          ws.close()
+          scheduleReconnect()
+        }, SILENCE_MS)
+      }
+      resetSilence()
       ws.onopen = () => {
         ws.send(JSON.stringify({ subscribe: gameId }))
         void resync().catch(() => {
@@ -153,6 +171,7 @@ export function useLiveGame(gameId: string): UseLiveGame {
         })
       }
       ws.onmessage = (msg) => {
+        resetSilence()
         let raw: unknown
         try {
           raw = JSON.parse(String(msg.data))
@@ -200,6 +219,7 @@ export function useLiveGame(gameId: string): UseLiveGame {
     return () => {
       cancelled = true
       if (retryTimer) clearTimeout(retryTimer)
+      if (silenceTimer) clearTimeout(silenceTimer)
       window.removeEventListener("online", regain)
       document.removeEventListener("visibilitychange", onVisible)
       socket?.close()

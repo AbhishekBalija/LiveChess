@@ -2,12 +2,13 @@ import { execSync } from "node:child_process";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { Redis } from "ioredis";
 import postgres from "postgres";
+import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { persistIngestResult, type Db } from "../db/client";
 import * as schema from "../db/schema";
 import { games, outboxEvents, tournaments } from "../db/schema";
 import { applyMoveReceived, emptyGame } from "../ingestion/handler";
-import { buildWrites, cacheKey, pollOnce, STREAM, type RedisPort } from "./publisher";
+import { buildWrites, cacheKey, pollOnce, pruneOnce, STREAM, type RedisPort } from "./publisher";
 
 describe("publisher mapping", () => {
   it("derives stream event and cache state from the same outbox row", () => {
@@ -148,6 +149,42 @@ describe.runIf(URL)("publisher integration", () => {
     expect(cache).toMatchObject({ lastPly: "2", lastSan: "e5", version: "2" });
     // Second poll is a no-op: rows are marked published.
     await expect(pollOnce(database, port)).resolves.toBe(0);
+  });
+
+  it("prunes published rows beyond the newest `keep`, never unpublished ones", async () => {
+    // Fresh game: the test above already wrote plies 1 and 2 for gameId.
+    const [g] = await database
+      .insert(games)
+      .values({
+        tournamentId: (await database.select({ id: games.tournamentId }).from(games).where(eq(games.id, gameId)))[0].id,
+        source: "lichess",
+        sourceId: `game-prune-${Date.now()}`,
+        white: "C",
+        black: "D",
+        currentFen: "",
+      })
+      .returning({ id: games.id });
+    const pruneGameId = g.id;
+    const state = emptyGame();
+    for (const [ply, san] of [[1, "d4"], [2, "d5"]] as const) {
+      const r = applyMoveReceived(state, { ply, san, fen: `fen-${ply}`, clock: null, source: "lichess" });
+      if (r.outcome === "duplicate-noop") throw new Error("unexpected noop");
+      await persistIngestResult(database, pruneGameId, r);
+    }
+    await pollOnce(database, port);
+    // One more row that stays unpublished.
+    const r = applyMoveReceived(state, { ply: 3, san: "c4", fen: "fen-3", clock: null, source: "lichess" });
+    if (r.outcome === "duplicate-noop") throw new Error("unexpected noop");
+    await persistIngestResult(database, pruneGameId, r);
+
+    await expect(pruneOnce(database, 2)).resolves.toBeGreaterThan(0);
+    const left = await database
+      .select({ id: outboxEvents.id, published: outboxEvents.published })
+      .from(outboxEvents)
+      .orderBy(asc(outboxEvents.id));
+    // keep=2 leaves the newest two ids: published d5 and unpublished c4.
+    expect(left.map((row) => row.published)).toEqual([true, false]);
+    await pollOnce(database, port);
   });
 });
 

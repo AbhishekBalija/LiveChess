@@ -16,6 +16,17 @@ The publisher processes rows in happened-order via `ORDER BY id`. UUIDs do not s
 **Q: Who owns Redis writes, and why only one writer?**
 The Outbox Publisher does both the Stream XADD and the cache update from the same polled row (ADR 0003). Letting the Move Handler write the cache directly would recreate the exact dual-write risk the outbox removes, just on a second path with no retry.
 
+**Q: If published rows are never read again, how do you stop the outbox growing forever?**
+Prune them. The publisher deletes published rows outside the newest 10,000 ids once an hour; unpublished rows are never touched, so nothing waiting to go out can be lost. Keeping a row count instead of a time window avoided adding a `created_at` column and a migration. The Redis stream gets the same treatment with `XADD MAXLEN ~ 10000`: the `~` lets Redis trim whole internal blocks, which is far cheaper than an exact cap. A client that misses trimmed entries catches up through resync, so the cap cannot lose moves.
+
+## WebSocket heartbeats
+
+**Q: What is a half-open connection and why does it matter for live updates?**
+When a phone switches networks or a laptop sleeps, the other side never gets a close frame. Both ends think the socket is open until TCP gives up, which can take minutes. The server keeps sending to a dead subscriber, and the client shows "Live" while receiving nothing.
+
+**Q: Why an app-level heartbeat when WebSocket already has ping/pong?**
+Protocol pings solve the server side: Bun pings every socket and closes it after `idleTimeout` (60s here) with no pong. But browsers answer pings automatically and never expose them to JavaScript, so the client cannot use them. The gateway also sends a small `{"type":"ping"}` frame every 25s, and the client reconnects if it hears nothing for 60s (two missed heartbeats plus margin). On reconnect it resyncs from its version, so nothing is lost.
+
 ## Ply vs move number
 
 **Q: Why is move identity keyed on ply and not move number?**
