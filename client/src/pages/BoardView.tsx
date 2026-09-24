@@ -7,7 +7,6 @@ import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
 import { EvalBar } from "@/components/EvalBar"
-import { EvalGraph } from "@/components/EvalGraph"
 import { useMoveBrowser, type MoveBrowser } from "@/lib/browse"
 import { barPercent, evalWords, formatEval, resultWords } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
@@ -139,12 +138,6 @@ export function BoardView() {
         </div>
 
         <section aria-labelledby="moves-heading" className="flex min-w-0 flex-col gap-4 px-4 md:px-0">
-          {state.lastPly >= 2 && (
-            <>
-              <h2 className="text-lg font-bold md:text-xl">Eval</h2>
-              <EvalGraph moves={state.moves} lastPly={state.lastPly} viewedPly={viewed} onPick={browser.goTo} />
-            </>
-          )}
           <h2 id="moves-heading" className="text-lg font-bold md:text-xl">Moves</h2>
           <MoveList moves={state.moves} viewedPly={viewed} lastPly={state.lastPly} onPick={browser.goTo} />
         </section>
@@ -164,7 +157,7 @@ function barWords(
   if (result) {
     return { words: resultWords(result) ?? result, align: result === "1-0" ? "left" : result === "0-1" ? "right" : "center" }
   }
-  if (!e) return { words: ply === 0 ? "Start position" : "Engine is thinking...", align: "center" }
+  if (!e) return { words: ply === 0 ? "Start position" : "Analyzing this position...", align: "center" }
   const number = formatEval(e)
   // Mates and proven wins already say it all in words.
   const words =
@@ -384,7 +377,7 @@ function MoveList({
     <ol
       ref={scroller}
       aria-label="Moves"
-      className="relative max-h-80 overflow-y-auto rounded-lg bg-card py-2 font-mono text-[15px] md:max-h-[420px]"
+      className="relative max-h-80 overflow-y-auto rounded-lg bg-card py-2 font-mono text-[15px] md:max-h-[560px]"
     >
       {rows.map((row) => (
         <li key={row.n} className="grid grid-cols-[3.25rem_1fr_1fr] items-center px-2 odd:bg-white/[0.02]">

@@ -160,4 +160,41 @@ describe.runIf(URL)("eval worker integration", () => {
     await expect(nextJob(database)).resolves.toBeNull();
     await sql.end();
   });
+
+  it("analyzes games someone has open before any other game", async () => {
+    const sql = postgres(URL as string);
+    const database: Db = drizzle(sql, { schema });
+    await database.update(moves).set({ evalSource: "invalid" });
+    const [t] = await database
+      .insert(tournaments)
+      .values({ source: "lichess", sourceId: `tour-watch-${Date.now()}`, name: "Watch Test" })
+      .returning({ id: tournaments.id });
+    const newGame = async (tag: string): Promise<string> => {
+      const [g] = await database
+        .insert(games)
+        .values({ tournamentId: t.id, source: "lichess", sourceId: `game-${tag}-${Date.now()}`, white: "A", black: "B", currentFen: "" })
+        .returning({ id: games.id });
+      const state = emptyGame();
+      for (const [ply, san, fen] of [
+        [1, "e4", BLACK_TO_MOVE],
+        [2, "e5", "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"],
+      ] as const) {
+        const r = applyMoveReceived(state, { ply, san, fen, clock: null, source: "lichess" });
+        if (r.outcome === "duplicate-noop") throw new Error("unexpected noop");
+        await persistIngestResult(database, g.id, r);
+      }
+      return g.id;
+    };
+    const watchedGame = await newGame("watched");
+    const otherGame = await newGame("other"); // more recently active
+
+    await expect(nextJob(database)).resolves.toMatchObject({ gameId: otherGame, ply: 2 });
+    const first = await nextJob(database, [watchedGame]);
+    expect(first).toMatchObject({ gameId: watchedGame, ply: 2 });
+    if (!first) throw new Error("no job");
+    await saveEval(database, first, { eval: { cp: 10, mate: null }, source: "stockfish" });
+    // The watched game's older ply still beats the other game's newest one.
+    await expect(nextJob(database, [watchedGame])).resolves.toMatchObject({ gameId: watchedGame, ply: 1 });
+    await sql.end();
+  });
 });

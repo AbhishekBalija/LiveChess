@@ -1,7 +1,9 @@
+import { Redis } from "ioredis";
 import { envInt } from "../env";
 import { db } from "../db/client";
 import { lichessHttp } from "../ingestion/worker";
 import { Stockfish } from "./engine";
+import { watchedGames } from "./watched";
 import { Evaluator, evalOnce } from "./worker";
 
 // Separate Bun process: `bun run eval`. Needs a Stockfish binary on the
@@ -18,6 +20,7 @@ if (!Bun.which(STOCKFISH)) {
   process.exit(1);
 }
 
+const redis = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379");
 const engine = new Stockfish(STOCKFISH, THREADS);
 // A dead engine cannot recover on its own: exit and let whatever runs
 // this process (bun run dev, systemd) notice.
@@ -38,7 +41,9 @@ setInterval(() => {
 
 for (;;) {
   try {
-    if (await evalOnce(db(), evaluator)) {
+    // Redis down only loses the priority, never the analysis itself.
+    const watched = await watchedGames(redis).catch(() => []);
+    if (await evalOnce(db(), evaluator, watched)) {
       done += 1;
       continue;
     }

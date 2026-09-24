@@ -4,6 +4,17 @@ import { Router } from "./router";
 import { STREAM } from "../publisher/publisher";
 
 describe("gateway router", () => {
+  it("lists every game someone has open, once", () => {
+    const router = new Router();
+    router.subscribe({}, "g-1");
+    router.subscribe({}, "g-1");
+    const conn = {};
+    router.subscribe(conn, "g-2");
+    expect([...router.watchedGames()].sort()).toEqual(["g-1", "g-2"]);
+    router.unsubscribeAll(conn);
+    expect([...router.watchedGames()]).toEqual(["g-1"]);
+  });
+
   it("fans out only to subscribers of that game", () => {
     const router = new Router();
     const a = {};

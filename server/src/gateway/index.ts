@@ -10,6 +10,7 @@ import { consumeOnce } from "./consumer";
 import { parseClientMessage } from "./messages";
 import { Router } from "./router";
 import { STREAM } from "../publisher/publisher";
+import { markWatched } from "../eval/watched";
 
 // Thin transport process. All routing decisions live in router.ts;
 // this only binds sockets to the router and the stream to the router.
@@ -179,6 +180,12 @@ void pump();
 // socket. This frame gives the client something to time out on; it has
 // no gameId, so the client's event parser ignores it.
 const HEARTBEAT_MS = 25_000;
+
+// Tell the eval worker which games people have open, so those get
+// analyzed first (ADR 0006).
+setInterval(() => {
+  markWatched(redis, router.watchedGames()).catch((err) => console.error("watched update failed", err));
+}, 10_000);
 setInterval(() => {
   for (const ws of sockets.values()) ws.send('{"type":"ping"}');
 }, HEARTBEAT_MS);
@@ -205,7 +212,10 @@ Bun.serve({
     message(ws, raw) {
       // Malformed frames are dropped, never thrown (see messages.ts).
       const msg = parseClientMessage(raw);
-      if (msg) router.subscribe(ws, msg.subscribe);
+      if (!msg) return;
+      router.subscribe(ws, msg.subscribe);
+      // Right away too, so opening a game starts its analysis quickly.
+      markWatched(redis, [msg.subscribe]).catch((err) => console.error("watched update failed", err));
     },
     close(ws) {
       router.unsubscribeAll(ws);
