@@ -33,6 +33,10 @@ _Avoid_: update, overwrite
 An engine's assessment of the position after a Ply, from White's point of view: a score in centipawns or a forced mate in N. Belongs to the Move it was computed for.
 _Avoid_: evaluation score, engine line
 
+**Move classification**:
+A label for how good a Move was, judged from the Evals before and after it: bad labels (inaccuracy, mistake, blunder) and good ones (such as best and brilliant). Shown on the board by highlighting the Move.
+_Avoid_: judgement, move quality, annotation
+
 **Truncation**:
 Superseding every live Ply after a given Ply because the source took moves back, rewinding the game to that Ply (ADR 0004).
 _Avoid_: rollback, delete, undo
