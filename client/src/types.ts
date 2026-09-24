@@ -57,6 +57,30 @@ export interface GameListItem {
   // Eval of the current position from White's side, null until analyzed.
   evalCp: number | null
   evalMate: number | null
+  // Lichess round id (server GameListItem.roundId).
+  roundId: string | null
+}
+
+// GET /rounds/:roundId (server/src/api/round.ts).
+export interface RoundPlayer {
+  name: string
+  rating: number | null
+  title: string | null
+  fed: string | null
+}
+
+export interface RoundInfo {
+  roundId: string
+  tournament: string
+  round: string
+  startsAt: string | null
+  ongoing: boolean
+  finished: boolean
+  format: string | null
+  timeControl: string | null
+  location: string | null
+  url: string
+  pairings: Array<{ white: RoundPlayer; black: RoundPlayer }>
 }
 
 // One row of GET /upcoming (server/src/api/upcoming.ts).

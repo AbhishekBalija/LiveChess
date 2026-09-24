@@ -28,6 +28,8 @@ export interface GameListItem {
   // the eval worker has reached it.
   evalCp: number | null;
   evalMate: number | null;
+  // Lichess round id, so a round page can pick out its games.
+  roundId: string | null;
 }
 
 export interface GamesDbPort {
@@ -103,6 +105,7 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
           prevClock: prev.clock,
           evalCp: moves.evalCp,
           evalMate: moves.evalMate,
+          roundId: games.roundSourceId,
           fen: games.currentFen,
           version: games.version,
           updatedAt: games.updatedAt,
@@ -142,6 +145,7 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         updatedAt: r.updatedAt.toISOString(),
         evalCp: r.evalCp,
         evalMate: r.evalMate,
+        roundId: r.roundId,
       }));
     },
   };

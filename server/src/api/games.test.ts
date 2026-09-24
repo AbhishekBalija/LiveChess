@@ -24,6 +24,7 @@ const item = (id: string, result = "*"): GameListItem => ({
   updatedAt: "2026-09-23T12:00:00.000Z",
   evalCp: null,
   evalMate: null,
+  roundId: null,
 });
 
 describe("parseStatus", () => {

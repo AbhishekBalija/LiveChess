@@ -17,6 +17,7 @@ const g = (id: string): GameListItem => ({
   updatedAt: "",
   evalCp: null,
   evalMate: null,
+  roundId: null,
 })
 
 describe("stableOrder", () => {

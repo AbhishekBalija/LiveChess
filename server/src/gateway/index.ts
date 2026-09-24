@@ -1,6 +1,7 @@
 import { Redis } from "ioredis";
 import { envInt } from "../env";
 import { drizzleGamesDb, GamesHttpError, listGames, parseStatus } from "../api/games";
+import { RoundCache, RoundHttpError } from "../api/round";
 import { UpcomingCache } from "../api/upcoming";
 import { nodeHttp } from "../ingestion/worker";
 import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
@@ -104,6 +105,24 @@ async function handleUpcomingGet(req: Request): Promise<Response | null> {
   }
 }
 
+// One Lichess round for the round page (#51), cached 2 minutes per round.
+const rounds = new RoundCache(nodeHttp);
+const ROUND_ROUTE = /^\/rounds\/([^/]+)$/;
+
+async function handleRoundGet(req: Request): Promise<Response | null> {
+  const match = ROUND_ROUTE.exec(new URL(req.url).pathname);
+  if (!match || req.method !== "GET") return null;
+  try {
+    return Response.json(await rounds.get(decodeURIComponent(match[1] ?? "")), { headers: corsHeaders() });
+  } catch (err) {
+    if (err instanceof RoundHttpError) {
+      return Response.json({ error: err.message }, { status: err.status, headers: corsHeaders() });
+    }
+    console.error("round failed", err);
+    return Response.json({ error: "round unavailable" }, { status: 502, headers: corsHeaders() });
+  }
+}
+
 const router = new Router();
 const sockets = new Map<object, { send(message: string): void }>();
 
@@ -167,7 +186,8 @@ setInterval(() => {
 Bun.serve({
   port: PORT,
   async fetch(req, server) {
-    const state = (await handleStateGet(req)) ?? (await handleGamesGet(req)) ?? (await handleUpcomingGet(req));
+    const state = (await handleStateGet(req)) ?? (await handleGamesGet(req)) ?? (await handleUpcomingGet(req)) ??
+      (await handleRoundGet(req));
     if (state) return state;
     if (server.upgrade(req)) return;
     return new Response("livechess gateway", { status: 200 });
