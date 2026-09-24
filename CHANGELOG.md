@@ -6,6 +6,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
+Engine eval: every live move analyzed on the server, with win-probability
+bars on the board page and the home cards.
+
 ### Added
 - Engine eval (ADR 0006): a new eval worker (`bun run eval`, started by
   `bun run dev` when Stockfish is installed) analyzes every live move with
@@ -17,6 +22,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and a 4px strip along each home match card, White's share filling from
   the left (the same curve Lichess uses), with the eval ("+0.4", "#3")
   beside it. Finished games show their result on the bar.
+- Eval research (`docs/research/eval-options.md`) and ADR 0006.
 
 ## [0.2.0] - 2026-09-24
 
@@ -114,6 +120,7 @@ Slice 1: the live spine, verified against a live Lichess broadcast
 - Cache no longer rewinds the board on a correction to an older Ply.
 - Board rows stay equal height in sparse endgame positions.
 
-[Unreleased]: https://github.com/AbhishekBalija/LiveChess/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AbhishekBalija/LiveChess/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AbhishekBalija/LiveChess/releases/tag/v0.1.0
