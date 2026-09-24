@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { START_FEN } from "./fen"
-import { slidesBetween } from "./moveAnimation"
+import { destinationSquare, slidesBetween } from "./moveAnimation"
 
 describe("slidesBetween", () => {
   it("slides a normal move back to its origin", () => {
@@ -34,5 +34,22 @@ describe("slidesBetween", () => {
   it("does not animate a jump of several moves", () => {
     const later = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
     expect(slidesBetween(START_FEN, later).size).toBe(0)
+  })
+})
+
+describe("destinationSquare", () => {
+  it("is where the moved piece landed", () => {
+    const afterE4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    expect(destinationSquare(START_FEN, afterE4)).toBe("e4")
+  })
+
+  it("is the king's square when castling", () => {
+    const before = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
+    const after = "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1"
+    expect(destinationSquare(before, after)).toBe("g1")
+  })
+
+  it("is nothing for a jump of several moves", () => {
+    expect(destinationSquare(START_FEN, "8/8/8/8/8/8/8/K6k w - - 0 1")).toBeNull()
   })
 })

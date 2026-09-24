@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest"
+import type { LiveMove, MoveEval } from "./game"
+import { classifyMove } from "./classify"
+
+// Evals are from White's side. Ply 1, 3, 5... are White's moves.
+const cp = (value: number): MoveEval => ({ cp: value, mate: null })
+const mate = (n: number): MoveEval => ({ cp: null, mate: n })
+
+function movesWith(evals: Array<MoveEval | undefined>): Map<number, LiveMove> {
+  const moves = new Map<number, LiveMove>()
+  evals.forEach((e, i) => {
+    const ply = i + 1
+    moves.set(ply, { ply, san: "x", fen: "", clock: null, version: 1, eval: e })
+  })
+  return moves
+}
+
+// Label of the last ply in the list.
+const labelOf = (evals: Array<MoveEval | undefined>) => classifyMove(movesWith(evals), evals.length)
+
+describe("classifyMove: win% drop (Lichess thresholds)", () => {
+  // White moves at ply 3, from +0.00 to a worse eval for White.
+  it("labels 5, 10 and 15 point drops as inaccuracy, mistake, blunder", () => {
+    expect(labelOf([cp(0), cp(0), cp(-30)])).toBeNull() // about 2.8 points
+    expect(labelOf([cp(0), cp(0), cp(-60)])).toBe("inaccuracy") // about 5.5
+    expect(labelOf([cp(0), cp(0), cp(-120)])).toBe("mistake") // about 11
+    expect(labelOf([cp(0), cp(0), cp(-180)])).toBe("blunder") // about 16
+  })
+
+  it("judges from the mover's side, so Black losing ground is flagged too", () => {
+    // Black moves at ply 2: White's eval going up is Black's loss.
+    expect(labelOf([cp(0), cp(180)])).toBe("blunder")
+    // A White move that makes White's eval go up is fine.
+    expect(labelOf([cp(0), cp(0), cp(180)])).toBeNull()
+  })
+
+  it("ignores small changes in a position that is already decided", () => {
+    expect(labelOf([cp(0), cp(-800), cp(-1200)])).toBeNull()
+  })
+
+  it("never flags keeping a tablebase win", () => {
+    expect(labelOf([cp(0), cp(0), cp(20_000)])).toBeNull()
+    expect(labelOf([cp(0), cp(20_000), cp(20_000)])).toBeNull()
+  })
+
+  it("gives no label without both evals, or for the first move", () => {
+    expect(labelOf([cp(0), undefined, cp(-500)])).toBeNull()
+    expect(labelOf([cp(0), cp(0), undefined])).toBeNull()
+    expect(labelOf([cp(-500)])).toBeNull()
+  })
+})
+
+describe("classifyMove: mates (Lichess mate table)", () => {
+  it("allowing a forced mate depends on how bad things already were", () => {
+    expect(labelOf([cp(0), cp(0), mate(-3)])).toBe("blunder")
+    expect(labelOf([cp(0), cp(-700), mate(-3)])).toBe("blunder")
+    expect(labelOf([cp(0), cp(-800), mate(-3)])).toBe("mistake")
+    expect(labelOf([cp(0), cp(-1200), mate(-3)])).toBe("inaccuracy")
+  })
+
+  it("losing your own forced mate depends on what is left", () => {
+    expect(labelOf([mate(3), mate(2), cp(1500)])).toBe("inaccuracy")
+    expect(labelOf([mate(3), mate(2), cp(800)])).toBe("mistake")
+    expect(labelOf([mate(3), mate(2), cp(300)])).toBe("blunder")
+    expect(labelOf([mate(3), mate(2), mate(-4)])).toBe("blunder")
+  })
+
+  it("does not flag delivering checkmate", () => {
+    expect(labelOf([cp(0), mate(1), mate(0)])).toBeNull()
+  })
+
+  it("does not flag a slower mate or a tablebase win after a mate", () => {
+    expect(labelOf([mate(3), mate(2), mate(5)])).toBeNull()
+    expect(labelOf([mate(3), mate(2), cp(20_000)])).toBeNull()
+  })
+
+  it("does not flag moves in a position where the opponent already mates", () => {
+    expect(labelOf([cp(0), mate(-3), mate(-2)])).toBeNull()
+    expect(labelOf([cp(0), mate(-3), cp(-300)])).toBeNull()
+  })
+
+  it("mirrors all of it for Black", () => {
+    // Black moves at ply 2 and allows White a mate.
+    expect(labelOf([cp(0), mate(3)])).toBe("blunder")
+  })
+})
+
+describe("classifyMove: miss", () => {
+  it("a mistake or blunder right after the opponent's mistake or blunder is a miss", () => {
+    // Black blunders at ply 2 (0 -> +3), White throws it back at ply 3.
+    expect(labelOf([cp(0), cp(300), cp(0)])).toBe("miss")
+    expect(labelOf([cp(0), cp(300), cp(160)])).toBe("miss")
+  })
+
+  it("an inaccuracy after the opponent's error stays an inaccuracy", () => {
+    expect(labelOf([cp(0), cp(300), cp(220)])).toBe("inaccuracy")
+  })
+
+  it("a blunder after a normal move stays a blunder", () => {
+    expect(labelOf([cp(0), cp(10), cp(-300)])).toBe("blunder")
+  })
+})

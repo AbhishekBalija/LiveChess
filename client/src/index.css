@@ -35,6 +35,12 @@
   --gold: #e8c26a;
   --win: #5fd08a;
   --body: #c9d1e4;
+
+  /* Move classification (spec #69), chess.com-style colours */
+  --cls-inaccuracy: #f7c631;
+  --cls-mistake: #ffa459;
+  --cls-miss: #ff7769;
+  --cls-blunder: #fa412d;
 }
 
 @theme inline {

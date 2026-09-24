@@ -91,8 +91,11 @@ Nothing new for fans; make what exists trustworthy and public.
 
 ## Slice 3: AI coverage
 
-- Move classifier from eval swings (blunder, mistake, tactical shot,
-  material swing, forced sequence)
+- [ ] Move classification (spec #69, research in
+      `docs/research/move-classification.md`): Inaccuracy, Mistake,
+      Blunder and Miss (#70), Best (#71), Brilliant (#72), Great (#73,
+      needs an ADR 0006 amendment). Tactical shots, material swings and
+      forced sequences move to the commentary work
 - AI commentary: short plain-language lines for classified moments, LLM
   with per-game and global rate limits and cost caps
 - Auto recap when a game finishes
