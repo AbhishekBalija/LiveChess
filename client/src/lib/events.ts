@@ -1,5 +1,5 @@
 import { splitTournamentName } from "@/lib/names"
-import type { GameListItem } from "@/types"
+import type { FeaturedPick, GameListItem } from "@/types"
 
 // Live games grouped for the Events page (#47): one card per event, where
 // an event Lichess splits into several tours (the Olympiad's Open and Women
@@ -50,4 +50,15 @@ export function eventCards(games: GameListItem[]): EventCard[] {
 // Short labels ("C9", "D11") read best as a row of chips.
 export function showAsChips(card: EventCard): boolean {
   return card.tours.length > 1 && card.tours.every((t) => t.label.length <= 5)
+}
+
+// The featured game for a whole event: the best pick among its tours.
+// Scores come from one hype formula, so they compare across tours.
+export function featuredFor(card: EventCard, byTournament: Record<string, FeaturedPick>): FeaturedPick | null {
+  let best: FeaturedPick | null = null
+  for (const tour of card.tours) {
+    const pick = byTournament[tour.tournamentId]
+    if (pick && (!best || pick.score > best.score)) best = pick
+  }
+  return best
 }

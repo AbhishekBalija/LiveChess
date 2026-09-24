@@ -6,6 +6,7 @@ import { ChessBoard } from "@/components/ChessBoard"
 import { MatchCard, MatchCardSkeleton } from "@/components/MatchCard"
 import { UpcomingCard } from "@/components/UpcomingCard"
 import { paletteFor } from "@/lib/boardPalette"
+import { eventCards, featuredFor, type EventCard } from "@/lib/events"
 import { useNow } from "@/lib/clock"
 import { resultLine, splitTournamentName, surname } from "@/lib/names"
 import { formatMove, sideToMove } from "@/lib/ply"
@@ -21,18 +22,14 @@ import type { FeaturedPick, GameListItem } from "@/types"
 // How many scoreboard cards the strip holds before the grid takes over.
 const STRIP_CARDS = 12
 
-type Tab = { id: string; label: string; tournamentId?: string; finished?: boolean }
+type Tab = { id: string; label: string; event?: EventCard; finished?: boolean }
 
+// One tab per event, so a split event (the Olympiad's Open and Women
+// tours) is one tab rather than several with the same title (#47).
 function tabsFor(games: GameListItem[]): Tab[] {
-  const tournaments = new Map<string, { name: string; count: number }>()
-  for (const g of games) {
-    const t = tournaments.get(g.tournament.id) ?? { name: splitTournamentName(g.tournament.name).title, count: 0 }
-    t.count += 1
-    tournaments.set(g.tournament.id, t)
-  }
   return [
     { id: "live", label: `All live (${games.length})` },
-    ...[...tournaments].map(([id, t]) => ({ id, label: `${t.name} (${t.count})`, tournamentId: id })),
+    ...eventCards(games).map((event) => ({ id: event.key, label: `${event.title} (${event.total})`, event })),
     { id: "finished", label: "Finished", finished: true },
   ]
 }
@@ -68,28 +65,41 @@ export function Home() {
             Can't reach server, retrying...
           </p>
         )}
-        {tab.tournamentId && (
-          <Link
-            to={`/events/${tab.tournamentId}`}
-            className="mx-4 -mb-2 flex w-fit items-center gap-2 rounded-full border border-line-strong px-4 py-2.5 text-sm font-semibold text-foreground hover:border-primary md:mx-8 lg:mx-12"
-          >
-            <LayoutGrid className="size-4" aria-hidden />
-            Watch all {live.games?.filter((g) => g.tournament.id === tab.tournamentId).length ?? 0} boards
-          </Link>
-        )}
+        {tab.event && <WatchLinks event={tab.event} />}
         {tab.finished ? (
           <FinishedGames />
         ) : (
           <LiveGames
-            games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null}
+            games={live.games?.filter((g) => !tab.event || tab.event.tours.some((t) => t.tournamentId === g.tournament.id)) ?? null}
             startingSoon={tab.id === "live" ? <StartingSoon /> : null}
             featured={
-              (tab.tournamentId ? live.featured?.byTournament[tab.tournamentId] : live.featured?.global) ?? null
+              (tab.event ? featuredFor(tab.event, live.featured?.byTournament ?? {}) : live.featured?.global) ?? null
             }
           />
         )}
       </main>
     </AppShell>
+  )
+}
+
+// Grid links for an event tab: one per tour, since the grid page shows
+// one tour at a time.
+function WatchLinks({ event }: { event: EventCard }) {
+  const single = event.tours.length === 1
+  return (
+    <div className="-mb-2 flex flex-wrap gap-2 px-4 md:px-8 lg:px-12">
+      {event.tours.map((tour) => (
+        <Link
+          key={tour.tournamentId}
+          to={`/events/${tour.tournamentId}`}
+          className="flex w-fit items-center gap-2 rounded-full border border-line-strong px-4 py-2.5 text-sm font-semibold text-foreground hover:border-primary"
+        >
+          <LayoutGrid className="size-4" aria-hidden />
+          {single ? `Watch all ${tour.count} boards` : tour.label}
+          {!single && <span className="font-normal text-muted-foreground">{tour.count}</span>}
+        </Link>
+      ))}
+    </div>
   )
 }
 

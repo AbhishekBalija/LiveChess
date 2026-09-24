@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { GameListItem } from "@/types"
-import { eventCards, showAsChips } from "./events"
+import type { FeaturedPick, GameListItem } from "@/types"
+import { eventCards, featuredFor, showAsChips } from "./events"
 
 const game = (id: string, tournament: GameListItem["tournament"]) => ({ id, tournament }) as GameListItem
 
@@ -43,5 +43,14 @@ describe("eventCards", () => {
     const [olympiad, qualifier] = eventCards([game("a", OPEN_1), game("b", OPEN_2), game("c", C9), game("d", C11)])
     expect(showAsChips(olympiad!)).toBe(false)
     expect(showAsChips(qualifier!)).toBe(true)
+  })
+})
+
+describe("featuredFor", () => {
+  it("picks the highest-scoring pick among the event's tours", () => {
+    const [card] = eventCards([game("a", OPEN_1), game("b", OPEN_2)])
+    const pick = (gameId: string, score: number) => ({ gameId, score }) as FeaturedPick
+    expect(featuredFor(card!, { o1: pick("a", 2), o2: pick("b", 5), c9: pick("z", 9) })?.gameId).toBe("b")
+    expect(featuredFor(card!, {})).toBeNull()
   })
 })
