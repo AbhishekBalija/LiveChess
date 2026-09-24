@@ -6,6 +6,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Outbox and stream no longer grow forever (#33): the publisher prunes
+  published outbox rows hourly, keeping the newest 10,000
+  (`OUTBOX_KEEP_ROWS`), and caps the Redis stream at about 10,000
+  entries (`STREAM_MAXLEN`).
+- Dead WebSocket connections are detected (#34): the gateway sends a
+  heartbeat every 25s and drops sockets silent for 60s; the board page
+  reconnects and resyncs when it hears nothing for 60s.
+
 ### Removed
 - Unused `server/src/ingestion/events.ts` zod schemas.
 

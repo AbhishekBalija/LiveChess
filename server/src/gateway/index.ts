@@ -155,6 +155,15 @@ async function pump(): Promise<void> {
 
 void pump();
 
+// App-level heartbeat. Browsers answer protocol pings automatically but
+// cannot see them, so a client could not tell a quiet game from a dead
+// socket. This frame gives the client something to time out on; it has
+// no gameId, so the client's event parser ignores it.
+const HEARTBEAT_MS = 25_000;
+setInterval(() => {
+  for (const ws of sockets.values()) ws.send('{"type":"ping"}');
+}, HEARTBEAT_MS);
+
 Bun.serve({
   port: PORT,
   async fetch(req, server) {
@@ -164,6 +173,10 @@ Bun.serve({
     return new Response("livechess gateway", { status: 200 });
   },
   websocket: {
+    // Bun pings every socket and closes it after this many seconds with
+    // no pong or message, so half-open connections are dropped within a
+    // minute instead of waiting on TCP (Bun's default is 120).
+    idleTimeout: 60,
     // No game state is sent on open or subscribe. The client renders
     // from GET /games/:id/state (resync) and applies live events after.
     open(ws) {

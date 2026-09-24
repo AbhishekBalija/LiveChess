@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, lte, sql } from "drizzle-orm";
 import { outboxEvents } from "../db/schema";
 import type { Db } from "../db/client";
 
@@ -109,4 +109,22 @@ export async function pollOnce(
       .where(eq(outboxEvents.id, row.id));
   }
   return rows.length;
+}
+
+// Published rows are only kept for debugging: the moves table and the
+// Redis stream already hold the history. Delete published rows outside the
+// newest `keep` ids; unpublished rows are never touched. Counting rows instead of days avoids a created_at
+// column (and a migration); at a few thousand moves a day, 10k rows is a
+// few days of history.
+export async function pruneOnce(database: Db, keep = 10_000): Promise<number> {
+  const deleted = await database
+    .delete(outboxEvents)
+    .where(
+      and(
+        eq(outboxEvents.published, true),
+        lte(outboxEvents.id, sql`(select max(${outboxEvents.id}) from ${outboxEvents}) - ${keep}`),
+      ),
+    )
+    .returning({ id: outboxEvents.id });
+  return deleted.length;
 }

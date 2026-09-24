@@ -31,6 +31,9 @@ function event(overrides: Partial<LiveEvent> = {}): LiveEvent {
 }
 
 describe("parseLiveEvent", () => {
+  it("ignores the gateway heartbeat frame", () => {
+    expect(parseLiveEvent(GID, { type: "ping" })).toBeNull()
+  })
   it("parses string ply/version to numbers", () => {
     expect(
       parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", clock: "1:29:10", version: "3" }),
