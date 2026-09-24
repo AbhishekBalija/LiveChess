@@ -65,10 +65,11 @@ Nothing new for fans; make what exists trustworthy and public.
 - [ ] Deploy: hosted Postgres and Redis, the four server processes, the
       client, environment files per stage, basic error tracking (#18,
       blocked on host decisions, `needs-info`)
-- [ ] Hardening backlog from the post-Slice-1.5 code scan, filed as
-      separate issues rather than blocking: gateway fan-out is
-      O(connections) per event (#32). Outbox and stream retention (#33)
-      and the WebSocket heartbeat (#34) are done. Settings validation, WebSocket frame
+- [x] Hardening backlog from the post-Slice-1.5 code scan, filed as
+      separate issues rather than blocking: gateway fan-out indexed by
+      game (#32), outbox and stream retention (#33), the WebSocket
+      heartbeat (#34), and recovery from a lost Redis consumer group
+      (#65) are done. Settings validation, WebSocket frame
       parsing, illegal-move handling and an outbox index are in PR #35.
 
 ## Slice 2: The board feels alive

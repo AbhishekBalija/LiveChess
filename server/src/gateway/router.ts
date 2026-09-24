@@ -24,22 +24,31 @@ export class Router {
   // Connection identity to its game subscriptions. Lifetime is the
   // process lifetime; a restart empties it and clients resync.
   private subs = new Map<object, Set<string>>();
+  // The same subscriptions by game, so an event only touches the sockets
+  // watching that game instead of every connection (#32).
+  private watchers = new Map<string, Set<object>>();
 
   subscribe(conn: object, gameId: string): void {
-    const set = this.subs.get(conn) ?? new Set<string>();
-    set.add(gameId);
-    this.subs.set(conn, set);
+    const games = this.subs.get(conn) ?? new Set<string>();
+    games.add(gameId);
+    this.subs.set(conn, games);
+    const conns = this.watchers.get(gameId) ?? new Set<object>();
+    conns.add(conn);
+    this.watchers.set(gameId, conns);
   }
 
   unsubscribeAll(conn: object): void {
+    for (const gameId of this.subs.get(conn) ?? []) {
+      const conns = this.watchers.get(gameId);
+      conns?.delete(conn);
+      if (conns?.size === 0) this.watchers.delete(gameId);
+    }
     this.subs.delete(conn);
   }
 
   // Games that someone has open right now.
   watchedGames(): Set<string> {
-    const out = new Set<string>();
-    for (const games of this.subs.values()) for (const id of games) out.add(id);
-    return out;
+    return new Set(this.watchers.keys());
   }
 
   connectionCount(): number {
@@ -50,14 +59,10 @@ export class Router {
   // to that game. No broadcast-everything, no catch-up from memory:
   // the router stores subscriptions, never events.
   fanout(event: LiveEvent, send: (conn: object, message: string) => void): number {
+    const conns = this.watchers.get(event.gameId);
+    if (!conns) return 0;
     const message = JSON.stringify(event);
-    let delivered = 0;
-    for (const [conn, games] of this.subs) {
-      if (games.has(event.gameId)) {
-        send(conn, message);
-        delivered += 1;
-      }
-    }
-    return delivered;
+    for (const conn of conns) send(conn, message);
+    return conns.size;
   }
 }

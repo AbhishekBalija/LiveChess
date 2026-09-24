@@ -63,6 +63,22 @@ describe("gateway router", () => {
     );
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("keeps delivering to the other viewers of a game when one leaves", () => {
+    const router = new Router();
+    const a = {};
+    const b = {};
+    router.subscribe(a, "g-1");
+    router.subscribe(b, "g-1");
+    router.unsubscribeAll(a);
+    const send = vi.fn();
+    const delivered = router.fanout(
+      { type: "MoveReceived", gameId: "g-1", ply: "1", san: "e4", fen: "f", clock: "", version: "1", result: "", evalCp: "", evalMate: "" },
+      send,
+    );
+    expect(delivered).toBe(1);
+    expect(send.mock.calls[0]?.[0]).toBe(b);
+  });
 });
 
 describe("gateway consumer", () => {

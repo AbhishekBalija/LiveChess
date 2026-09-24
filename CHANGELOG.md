@@ -32,6 +32,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Lichess tier and FIDE time control class (migration 0007).
 
 ### Fixed
+- Gateway fan-out only touches the viewers of the game a move belongs to
+  (#32). Subscriptions are indexed by game as well as by connection, so
+  each event no longer loops over every open WebSocket.
 - Gateway recovers when Redis comes back without its data (#65). Its
   consumer group was only created at startup, so after a Redis restart
   without persistence every read failed with NOGROUP and no live moves
