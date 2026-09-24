@@ -86,6 +86,7 @@ describe("gateway consumer", () => {
         ack: async (_s, _g, id) => {
           acked.push(id);
         },
+        createGroup: async () => {},
       },
       router,
       "test-consumer",
@@ -95,6 +96,39 @@ describe("gateway consumer", () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(acked).toEqual(["1-0", "2-0"]);
     expect(seen[0]?.[0]).toBe(GROUP);
+  });
+
+  it("re-creates the consumer group when Redis lost it (NOGROUP)", async () => {
+    const created: Array<[string, string]> = [];
+    const n = await consumeOnce(
+      {
+        readGroup: async () => {
+          throw new Error("NOGROUP No such key 'livechess:events' or consumer group 'gateway'");
+        },
+        ack: async () => {},
+        createGroup: async (stream, group) => {
+          created.push([stream, group]);
+        },
+      },
+      new Router(),
+      "test-consumer",
+      vi.fn(),
+    );
+    expect(n).toBe(0);
+    expect(created).toEqual([[STREAM, GROUP]]);
+  });
+
+  it("rethrows other read errors without touching the group", async () => {
+    const createGroup = vi.fn();
+    const port = {
+      readGroup: async () => {
+        throw new Error("connection lost");
+      },
+      ack: async () => {},
+      createGroup,
+    };
+    await expect(consumeOnce(port, new Router(), "test-consumer", vi.fn())).rejects.toThrow("connection lost");
+    expect(createGroup).not.toHaveBeenCalled();
   });
 
   it("maps stream fields to events with safe defaults", () => {

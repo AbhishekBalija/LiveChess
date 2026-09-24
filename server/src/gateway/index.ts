@@ -7,7 +7,7 @@ import { UpcomingCache } from "../api/upcoming";
 import { nodeHttp } from "../ingestion/worker";
 import { drizzleStateDb, getGameState, parseSinceVersion, StateHttpError } from "../api/state";
 import { db } from "../db/client";
-import { consumeOnce } from "./consumer";
+import { consumeOnce, GROUP } from "./consumer";
 import { parseClientMessage } from "./messages";
 import { Router } from "./router";
 import { STREAM } from "../publisher/publisher";
@@ -143,10 +143,21 @@ async function handleRoundGet(req: Request): Promise<Response | null> {
 const router = new Router();
 const sockets = new Map<object, { send(message: string): void }>();
 
+// Start from "now": clients resync any gap. BUSYGROUP means the group
+// already exists, which is fine.
+async function createGroup(stream: string, group: string): Promise<void> {
+  try {
+    await redis.xgroup("CREATE", stream, group, "$", "MKSTREAM");
+  } catch (err) {
+    if (!String(err).includes("BUSYGROUP")) throw err;
+  }
+}
+
 try {
-  await redis.xgroup("CREATE", STREAM, "gateway", "$", "MKSTREAM");
-} catch {
-  // Group already exists; restart reuses it and clients resync any gap.
+  await createGroup(STREAM, GROUP);
+} catch (err) {
+  // Redis not reachable yet; the pump re-creates the group once it is.
+  console.error("gateway could not create its consumer group, will retry", err);
 }
 
 async function pump(): Promise<void> {
@@ -178,6 +189,7 @@ async function pump(): Promise<void> {
           }));
         },
         ack: (stream, group, id) => redis.xack(stream, group, id),
+        createGroup,
       },
       router,
       CONSUMER,
