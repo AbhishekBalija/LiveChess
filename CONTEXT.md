@@ -29,6 +29,10 @@ Monotonic counter per game bumped on every new ply, Correction, Truncation and R
 Same identity key with different SAN, superseding the old row without deletion.
 _Avoid_: update, overwrite
 
+**Eval**:
+An engine's assessment of the position after a Ply, from White's point of view: a score in centipawns or a forced mate in N. Belongs to the Move it was computed for.
+_Avoid_: evaluation score, engine line
+
 **Truncation**:
 Superseding every live Ply after a given Ply because the source took moves back, rewinding the game to that Ply (ADR 0004).
 _Avoid_: rollback, delete, undo

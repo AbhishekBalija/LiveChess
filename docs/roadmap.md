@@ -79,8 +79,9 @@ Nothing new for fans; make what exists trustworthy and public.
       Finished tab (#19); board page game-over state (Finished badge,
       winner and score, clocks stopped), pushed live by a `GameResult`
       event when the source's Result changes
-- Eval: approach decided in an ADR first (Lichess cloud eval, Stockfish in
-  the viewer's browser, and/or a server worker), eval pushed live like moves
+- Eval: server Stockfish worker plus the Lichess tablebase, latest ply
+  first then backfill, stored per move and pushed live (ADR 0006,
+  research in `docs/research/eval-options.md`)
 - Win-probability bar from eval
 - Multi-board grid: watch a whole round at once
 

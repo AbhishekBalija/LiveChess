@@ -28,8 +28,8 @@ flowchart TB
     C2[("Redis Stream<br/>domain events, short retention")]
     C1[("Redis: current-state cache<br/>game:{id} → fen, version, eval")]
 
-    subgraph Queue["BullMQ — async jobs (retry/backoff/dead-letter)"]
-        Q1[Eval Job — Stockfish]
+    subgraph Queue["Async workers (eval: ADR 0006; commentary and notifications: queue not chosen yet)"]
+        Q1["Eval Worker: Stockfish + Lichess tablebase"]
         Q2[Commentary Job — classifier + LLM]
         Q3[Notification / Recap Job]
     end
@@ -60,7 +60,7 @@ flowchart TB
 3. A Redis failure stalls live delivery but never loses game history, and never loses an unpublished event either — the outbox guarantees eventual publication.
 4. A client always recovers from a missed event via the resync endpoint, never by guessing.
 5. Duplicate events are idempotent; corrections are a distinct, versioned event type.
-6. Any job (eval, in particular) is discarded if the game's version has moved on since the job was created.
+6. Any job is discarded if the game's version has moved on since the job was created. Eval is the exception: its result belongs to one move row and is discarded only if that row was superseded (ADR 0006).
 7. A new tournament source is a new adapter, not a core-logic change.
 8. One source failing doesn't affect any other source's live games.
 9. Commentary is rate-limited and classifier-gated — it can never become the most expensive or noisiest part of the system.
@@ -99,7 +99,7 @@ job.version = Game.version at job creation
 if job.version != current Game.version:
     discard result  # stale — either overtaken by a newer move or a correction
 ```
-This is the same mechanism for two different problems: an eval worker falling behind real-time, and a correction arriving mid-evaluation. Both are just "the version moved on."
+This is the same mechanism for two different problems: a worker falling behind real-time, and a correction arriving mid-job. Both are just "the version moved on." Eval is the exception (ADR 0006): every ply keeps its eval for the Slice 3 classifier, so an eval result is only discarded when its own move row was superseded, and a newer move does not make it stale.
 
 **Outbox pattern (resolves the Postgres → Redis dual-write gap):**
 ```
@@ -127,7 +127,7 @@ Because the outbox row is written in the *same transaction* as the move, a crash
 | PostgreSQL (`moves`, `outbox_events`) | Canonical move history + guarantees eventual publish | Yes | — |
 | Redis current-state cache | Fast-read snapshot per game | No | Postgres checkpoint |
 | Redis Stream | Live event distribution, short retention | Limited | Postgres + outbox replay |
-| BullMQ (Redis-backed queue) | Async job processing — retry/backoff/dead-letter | Operational | Jobs recreated from domain events |
+| Queue for commentary and notification jobs (not chosen yet; eval needs none, ADR 0006) | Async job processing, retry/backoff | Operational | Jobs recreated from domain events |
 
 ---
 
@@ -156,8 +156,8 @@ This keeps the LLM as a bounded cost, not a per-move expense.
 | Redis dies | Postgres intact; cache rebuilds from checkpoint; **no event lost** — outbox guarantees eventual publish |
 | WebSocket server crashes | Stateless — client reconnects + resyncs |
 | Client misses events | Resync endpoint, not local guessing |
-| Eval worker falls behind | Stale jobs (version mismatch) discarded |
-| Eval worker crashes | BullMQ retry/backoff; board shows last-known eval meanwhile |
+| Eval worker falls behind | Newest position per game first; older plies are backfilled later (ADR 0006) |
+| Eval worker crashes | Board shows last-known eval; on restart it picks up moves still missing an eval from Postgres |
 | LLM down or slow | Commentary job retries/circuit-breaks off the async queue; live path unaffected |
 | **Postgres unavailable** | **Not hardened in v1** — ingestion buffers upstream with retry; live delivery stalls. Known, deferred gap. |
 | chess-results.com HTML changes | Isolated to its own adapter |
@@ -173,7 +173,7 @@ This keeps the LLM as a bounded cost, not a per-move expense.
 3. **Missed Redis publish** (crash between commit and XADD) — outbox row stays unpublished → picked up on next poll, no data lost.
 4. **Redis restart** — current-state cache rebuilt lazily from Postgres checkpoint; stream resumes from wherever the outbox publisher left off.
 5. **Client reconnect** — sequence gap detected → resync endpoint called → authoritative state + version returned.
-6. **Stale eval result** — job's captured version ≠ current `Game.version` → result discarded.
+6. **Stale eval result** — the move row it was computed for was superseded (Correction or Truncation) → result discarded (ADR 0006).
 7. **LLM failure** — commentary job retries via BullMQ backoff; after max retries, dropped; live path unaffected.
 8. **Game correction** — notation mismatch on same identity key → `GameCorrected`, version bump → in-flight jobs on the old version discarded (same mechanism as #6).
 9. **Two ingestion workers, same event** — unique constraint on identity key rejects the second insert — same handling as duplicate.
@@ -196,7 +196,7 @@ This keeps the LLM as a bounded cost, not a per-move expense.
 
 | Feature | Lives in |
 |---|---|
-| Live win-probability bar | Eval job → current-state cache → WebSocket |
+| Live win-probability bar | Eval worker → `moves` row + outbox → WebSocket (ADR 0006) |
 | AI live commentary | Commentary job, classifier + rate-limit gated |
 | Upset alerts | Notification job (rating diff + result) |
 | Title-norm tracker | API layer, from live standings + rating |
