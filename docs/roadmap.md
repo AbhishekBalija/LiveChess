@@ -85,7 +85,8 @@ Nothing new for fans; make what exists trustworthy and public.
       `docs/research/eval-options.md`)
 - [x] Win-probability bar from eval: under the board and on home match
       cards, as in the Matchday design
-- Multi-board grid: watch a whole round at once
+- [x] Multi-board grid: every live board of a tournament at once
+      (`/events/:tournamentId`, "Watch all N boards" on its home tab)
 
 ## Slice 3: AI coverage
 

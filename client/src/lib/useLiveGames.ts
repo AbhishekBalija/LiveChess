@@ -25,7 +25,9 @@ export function stableOrder(previous: GameListItem[] | null, next: GameListItem[
   return [...known, ...fresh]
 }
 
-export function useLiveGames(status: "live" | "finished" = "live"): UseLiveGames {
+// pollMs: the round grid polls faster than home, since it is the page
+// people watch moves on.
+export function useLiveGames(status: "live" | "finished" = "live", pollMs = POLL_MS): UseLiveGames {
   const [games, setGames] = useState<GameListItem[] | null>(null)
   const [failing, setFailing] = useState(false)
 
@@ -51,7 +53,7 @@ export function useLiveGames(status: "live" | "finished" = "live"): UseLiveGames
 
     function start(): void {
       void load()
-      timer = setInterval(() => void load(), POLL_MS)
+      timer = setInterval(() => void load(), pollMs)
     }
 
     function onVisibility(): void {
@@ -67,7 +69,7 @@ export function useLiveGames(status: "live" | "finished" = "live"): UseLiveGames
       if (timer) clearInterval(timer)
       document.removeEventListener("visibilitychange", onVisibility)
     }
-  }, [status])
+  }, [status, pollMs])
 
   return { games, failing }
 }
