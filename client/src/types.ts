@@ -61,6 +61,20 @@ export interface GameListItem {
   roundId: string | null
 }
 
+// The featured game for a scope (server/src/api/featured.ts, #52).
+export interface FeaturedPick {
+  gameId: string
+  score: number
+  // "Top board · avg 2750 · big swing"
+  reason: string
+  game: GameListItem
+}
+
+export interface Featured {
+  global: FeaturedPick | null
+  byTournament: Record<string, FeaturedPick>
+}
+
 // GET /rounds/:roundId (server/src/api/round.ts).
 export interface RoundPlayer {
   name: string

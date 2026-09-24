@@ -1,6 +1,7 @@
 import { Redis } from "ioredis";
 import { envInt } from "../env";
 import { drizzleGamesDb, GamesHttpError, listGames, parseStatus } from "../api/games";
+import { drizzleFeaturedDb, FeaturedService } from "../api/featured";
 import { RoundCache, RoundHttpError } from "../api/round";
 import { UpcomingCache } from "../api/upcoming";
 import { nodeHttp } from "../ingestion/worker";
@@ -68,6 +69,13 @@ async function handleStateGet(req: Request): Promise<Response | null> {
   }
 }
 
+// Featured game per scope (#52), created on first use so db() stays lazy.
+let featuredService: FeaturedService | null = null;
+function featuredGames() {
+  featuredService ??= new FeaturedService(drizzleFeaturedDb(db()), drizzleGamesDb(db()));
+  return featuredService.get();
+}
+
 // Games list for the home live strip. Same CORS posture as resync.
 async function handleGamesGet(req: Request): Promise<Response | null> {
   const url = new URL(req.url);
@@ -82,7 +90,15 @@ async function handleGamesGet(req: Request): Promise<Response | null> {
   try {
     const status = parseStatus(url.searchParams.get("status"));
     const body = await listGames(drizzleGamesDb(db()), status);
-    return Response.json(body, { headers: corsHeaders() });
+    // The featured pick is a bonus: if it fails, the list still loads.
+    const featured =
+      status === "live"
+        ? await featuredGames().catch((err) => {
+            console.error("featured failed", err);
+            return null;
+          })
+        : null;
+    return Response.json({ ...body, featured }, { headers: corsHeaders() });
   } catch (err) {
     if (err instanceof GamesHttpError) {
       return Response.json({ error: err.message }, { status: err.status, headers: corsHeaders() });

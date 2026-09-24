@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { type Db } from "../db/client";
@@ -34,6 +34,8 @@ export interface GameListItem {
 
 export interface GamesDbPort {
   listGames(status: GameStatus, limit: number): Promise<GameListItem[]>;
+  // Specific games whatever their status (the featured game after it ends).
+  listGamesByIds(ids: string[]): Promise<GameListItem[]>;
 }
 
 export class GamesHttpError extends Error {
@@ -83,14 +85,7 @@ export function clocksFor(
 // the ply before (left joins, so a game with no moves yet still shows up).
 export function drizzleGamesDb(database: Db): GamesDbPort {
   const prev = alias(moves, "prev");
-  return {
-    async listGames(status, limit) {
-      const filter =
-        status === "live"
-          ? and(eq(games.result, "*"), gt(games.updatedAt, LIVE_WINDOW))
-          : status === "finished"
-            ? ne(games.result, "*")
-            : undefined;
+  async function query(filter: SQL | undefined, limit: number): Promise<GameListItem[]> {
       const rows = await database
         .select({
           id: games.id,
@@ -147,6 +142,19 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         evalMate: r.evalMate,
         roundId: r.roundId,
       }));
+  }
+  return {
+    listGames(status, limit) {
+      const filter =
+        status === "live"
+          ? and(eq(games.result, "*"), gt(games.updatedAt, LIVE_WINDOW))
+          : status === "finished"
+            ? ne(games.result, "*")
+            : undefined;
+      return query(filter, limit);
+    },
+    listGamesByIds(ids) {
+      return ids.length === 0 ? Promise.resolve([]) : query(inArray(games.id, ids), ids.length);
     },
   };
 }

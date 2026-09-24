@@ -4,6 +4,7 @@ import { applyMoveReceived, applyResultChange, applyTruncate, emptyGame, planTru
 import {
   broadcastSlugs,
   fensForSans,
+  gameFacts,
   gameSourceId,
   isEngineEvent,
   parseBroadcastGame,
@@ -250,5 +251,35 @@ describe("isEngineEvent (#39)", () => {
     expect(isEngineEvent({ name: "46th FIDE Chess Olympiad", info: { format: "11-round swiss for teams" } })).toBe(false);
     expect(isEngineEvent({ name: "Engineers Club Open" })).toBe(false);
     expect(isEngineEvent(undefined)).toBe(false);
+  });
+});
+
+describe("gameFacts (#52)", () => {
+  it("reads ratings, titles, ids, federations, teams and the board", () => {
+    expect(
+      gameFacts({
+        WhiteElo: "2764",
+        WhiteTitle: "GM",
+        WhiteFideId: "12940690",
+        WhiteTeam: "Germany",
+        BlackElo: "0",
+        BlackFed: "IND",
+        BlackTitle: "?",
+        Round: "8.3",
+      }),
+    ).toEqual({
+      whiteRating: 2764,
+      blackRating: null,
+      whiteTitle: "GM",
+      blackTitle: null,
+      whiteFideId: 12940690,
+      blackFideId: null,
+      whiteFed: null,
+      blackFed: "IND",
+      whiteTeam: "Germany",
+      blackTeam: null,
+      board: 3,
+    });
+    expect(gameFacts({ Round: "8" }).board).toBeNull();
   });
 });

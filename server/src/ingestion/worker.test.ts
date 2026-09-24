@@ -149,7 +149,7 @@ describe("worker http", () => {
   it("reads tour id and name from metadata, falling back to PGN", async () => {
     const http = fakeHttp(() => PGN);
     const tour = await fetchTourInfo(http, "test-open", "round-1", "rrrrrrrr", "Test Open");
-    expect(tour).toEqual({ sourceId: "tttttttt", name: "Test Open" });
+    expect(tour).toEqual({ sourceId: "tttttttt", name: "Test Open", tier: null, fideTc: null });
     const broken: HttpPort = {
       get: async () => response(404, "no"),
     };
@@ -353,6 +353,54 @@ describe.runIf(URL)("worker integration", () => {
     await ingestRound(database, http, "rrrrrrrr");
     expect(await gameVersion("aaaaaaaa")).toBe(11);
     expect(await outboxTypesSince(gameA.id, lastId)).toEqual(["GameResult"]);
+    await sql.end();
+  });
+
+  it("stores player facts, board and the event's tier (#52)", async () => {
+    sql = postgres(URL as string);
+    database = drizzle(sql, { schema });
+    const id = "facts001";
+    const pgn = game(id, "Keymer, Vincent", "Abdusattorov, Nodirbek", "1. e4 { [%clk 1:30:00] } *").replace(
+      '[Black "Abdusattorov, Nodirbek"]',
+      `[Black "Abdusattorov, Nodirbek"]
+[Round "8.3"]
+[WhiteElo "2764"]
+[WhiteTitle "GM"]
+[WhiteFideId "12940690"]
+[WhiteTeam "Germany"]
+[BlackElo "2762"]
+[BlackTitle "GM"]
+[BlackTeam "Uzbekistan"]`,
+    );
+    // Hermetic: forget this game from any earlier run so metadata is fetched.
+    const old = await database.select({ id: games.id }).from(games).where(eq(games.sourceId, id));
+    if (old[0]) {
+      await database.delete(moves).where(eq(moves.gameId, old[0].id));
+      await database.delete(games).where(eq(games.id, old[0].id));
+    }
+    const http: HttpPort = {
+      async get(url: string): Promise<HttpResponse> {
+        if (url.endsWith(".pgn")) return response(200, pgn);
+        return response(
+          200,
+          JSON.stringify({ tour: { id: "tfacts01", name: "Facts Open", tier: 5, info: { fideTC: "standard" } }, round: {} }),
+        );
+      },
+    };
+    await ingestRound(database, http, "rrrrrrrr");
+    const row = await gameRow(id);
+    expect(row).toMatchObject({
+      whiteRating: 2764,
+      blackRating: 2762,
+      whiteTitle: "GM",
+      blackTitle: "GM",
+      whiteFideId: 12940690,
+      whiteTeam: "Germany",
+      blackTeam: "Uzbekistan",
+      board: 3,
+    });
+    const [tour] = await database.select().from(tournaments).where(eq(tournaments.id, row.tournamentId));
+    expect(tour).toMatchObject({ tier: 5, fideTc: "standard" });
     await sql.end();
   });
 

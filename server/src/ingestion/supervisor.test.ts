@@ -167,7 +167,7 @@ describe.runIf(URL)("staleRoundIds (integration)", () => {
   it("finds rounds with unfinished games that nobody updated lately", async () => {
     const client = postgres(URL as string);
     const database = drizzle(client, { schema }) as unknown as Db;
-    const ids = ["stale0001", "fresh0001", "done00001"];
+    const ids = ["stale0001", "fresh0001", "done00001", "tcec00001"];
     const old = await database.select({ id: games.id }).from(games).where(inArray(games.sourceId, ids));
     for (const { id } of old) await database.delete(moves).where(eq(moves.gameId, id));
     await database.delete(games).where(inArray(games.sourceId, ids));
@@ -175,16 +175,23 @@ describe.runIf(URL)("staleRoundIds (integration)", () => {
       .insert(tournaments)
       .values({ source: "lichess", sourceId: `sup-${Date.now()}`, name: "Supervisor Test" })
       .returning({ id: tournaments.id });
+    const [engine] = await database
+      .insert(tournaments)
+      .values({ source: "lichess", sourceId: `sup-tcec-${Date.now()}`, name: "TCEC S30: Playoff" })
+      .returning({ id: tournaments.id });
     const base = { tournamentId: t!.id, source: "lichess", white: "A", black: "B", currentFen: "" };
     await database.insert(games).values([
       { ...base, sourceId: "stale0001", roundSourceId: "staleRnd", result: "*", updatedAt: sql`now() - interval '2 hours'` },
       { ...base, sourceId: "fresh0001", roundSourceId: "freshRnd", result: "*" },
       { ...base, sourceId: "done00001", roundSourceId: "doneRnd1", result: "1-0", updatedAt: sql`now() - interval '2 hours'` },
+      { ...base, tournamentId: engine!.id, sourceId: "tcec00001", roundSourceId: "tcecRnd1", result: "*", updatedAt: sql`now() - interval '2 hours'` },
     ]);
     const stale = await staleRoundIds(database);
     expect(stale).toContain("staleRnd");
     expect(stale).not.toContain("freshRnd");
     expect(stale).not.toContain("doneRnd1");
+    // Engine events are never pulled again (#39).
+    expect(stale).not.toContain("tcecRnd1");
     await client.end();
   });
 });

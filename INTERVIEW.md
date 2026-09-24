@@ -50,6 +50,14 @@ Version orders changes to the game itself, and a gap in it makes the client resy
 **Q: How do you turn a centipawn eval into a win-probability bar?**
 Centipawns are not a percentage: +1 pawn in a level middlegame and +1 pawn when already +8 mean very different things. The bar runs the eval through a logistic curve (the one Lichess uses: `50 + 50 * (2 / (1 + e^(-0.00368 * cp)) - 1)`, with cp clamped at plus or minus 1000), so small edges move the bar a little and big ones saturate near the ends. A forced mate or a tablebase win fills it completely, and a finished game shows its result instead.
 
+## Featured game
+
+**Q: How do you pick "the most exciting game" without it jumping around?**
+Two layers. A pure scoring function turns each live game's facts into a 0-1 hype score: six signals (strength, drama, tier, tension, board, freshness), each scaled to 0-1 and weighted, plus hard rules (live, has a move, moved in the last 10 minutes). Then a separate `pickFeatured` adds hysteresis: it re-checks once a minute but only switches after 2 minutes and only to a game scoring at least 0.1 more, so small score wobbles never flip the pick. Keeping scoring and stickiness apart means each is simple to test and tune on its own.
+
+**Q: Where do the ratings and board numbers come from?**
+From data we already read: Lichess broadcast PGNs carry `WhiteElo`, `WhiteTitle`, `WhiteFideId`, `WhiteTeam` and `Round "8.3"` (round 8, board 3), and the broadcast list carries each event's `tier`. Board numbers are turned into a rank within the round, because raw numbers differ per event (an Olympiad tour starts at board 169).
+
 ## Ply vs move number
 
 **Q: Why is move identity keyed on ply and not move number?**
