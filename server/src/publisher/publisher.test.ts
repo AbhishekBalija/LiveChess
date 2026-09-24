@@ -45,7 +45,7 @@ describe("publisher mapping", () => {
       payload: { gameId: "g-1", ply: 5, oldSan: "e5", newSan: "c5", fen: "fen-5b", version: 6 },
     });
     expect(writes.stream.san).toBe("c5");
-    expect(writes.cache.lastSan).toBe("c5");
+    expect(writes.cache?.lastSan).toBe("c5");
   });
 
   it("keeps the cache on the checkpoint for an old-ply correction", () => {
@@ -209,7 +209,21 @@ describe("buildWrites for a takeback", () => {
       clock: "",
       version: "6",
       result: "",
+      evalCp: "",
+      evalMate: "",
     });
     expect(writes.cache).toEqual({ fen: "fen-2", version: "6", lastPly: "2", lastSan: "e5" });
+  });
+});
+
+describe("buildWrites for an eval", () => {
+  const payload = { gameId: "g1", ply: 7, version: 7, evalCp: -35, evalMate: null };
+
+  it("streams the eval and caches it only for the newest ply", () => {
+    const latest = buildWrites({ eventType: "EvalUpdated", payload: { ...payload, latest: true } });
+    expect(latest.stream).toMatchObject({ type: "EvalUpdated", ply: "7", version: "7", evalCp: "-35", evalMate: "" });
+    expect(latest.cache).toEqual({ evalPly: "7", evalVersion: "7", evalCp: "-35", evalMate: "" });
+    const backfill = buildWrites({ eventType: "EvalUpdated", payload: { ...payload, latest: false } });
+    expect(backfill.cache).toBeNull();
   });
 });

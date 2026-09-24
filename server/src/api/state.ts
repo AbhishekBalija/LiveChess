@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { type Db } from "../db/client";
 import { games, moves, tournaments } from "../db/schema";
@@ -30,12 +30,22 @@ export interface LiveMoveRow {
   version: number;
 }
 
+// Stored eval of one live move (ADR 0006), from White's side. `version` is
+// the move row's Version, so the client only attaches it to that move.
+export interface EvalRow {
+  ply: number;
+  version: number;
+  cp: number | null;
+  mate: number | null;
+}
+
 // Narrow Postgres surface getGameState needs. Drizzle adapter below
 // implements it; unit tests fake it.
 export interface StateDbPort {
   findGame(gameId: string): Promise<GameCheckpoint | null>;
   findLiveMove(gameId: string, ply: number): Promise<{ ply: number; san: string } | null>;
   listLiveMovesSince(gameId: string, sinceVersion: number): Promise<LiveMoveRow[]>;
+  listEvals(gameId: string): Promise<EvalRow[]>;
 }
 
 // Narrow cache surface: read-only hash fetch, null on miss.
@@ -54,6 +64,12 @@ export interface GameStateResponse {
   fen: string;
   lastMove: LastMove | null;
   missedMoves: LiveMoveRow[];
+  // Evals do not bump Version, so "since version" cannot find the ones a
+  // client missed. The Postgres path returns every stored eval of the
+  // game; the cache fast path returns only the newest ply's.
+  // ponytail: older-ply evals missed during a disconnect stay missing
+  // until a full reload; fine for the live bar, revisit for an eval graph.
+  evals: EvalRow[];
   // Postgres path only; the cache fast path omits them. The first load
   // (since_version=0) always misses the fast path, so clients get names.
   white?: string;
@@ -129,7 +145,31 @@ export function drizzleStateDb(database: Db): StateDbPort {
         )
         .orderBy(asc(moves.version));
     },
+    async listEvals(gameId) {
+      return database
+        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate })
+        .from(moves)
+        .where(
+          and(
+            eq(moves.gameId, gameId),
+            eq(moves.superseded, false),
+            isNotNull(moves.evalSource),
+            // "invalid" rows have no eval to show.
+            sql`${moves.evalSource} <> 'invalid'`,
+          ),
+        )
+        .orderBy(asc(moves.ply));
+    },
   };
+}
+
+// The newest ply's eval, from the fields the publisher caches.
+function parseCachedEval(hash: Record<string, string>): EvalRow[] {
+  const ply = Number(hash["evalPly"]);
+  const version = Number(hash["evalVersion"]);
+  if (!hash["evalPly"] || !Number.isInteger(ply) || !Number.isInteger(version)) return [];
+  const num = (raw: string | undefined): number | null => (raw ? Number(raw) : null);
+  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]) }];
 }
 
 function parseCacheSnapshot(
@@ -156,6 +196,7 @@ function parseCacheSnapshot(
     fen,
     lastMove: lastPly === 0 ? null : { ply: lastPly, san: lastSan },
     missedMoves: [],
+    evals: parseCachedEval(hash),
   };
 }
 
@@ -187,12 +228,14 @@ export async function getGameState(
   const lastMove =
     game.lastPly === 0 ? null : await database.findLiveMove(gameId, game.lastPly);
   const missedMoves = await database.listLiveMovesSince(gameId, sinceV);
+  const evals = await database.listEvals(gameId);
   return {
     gameId: game.id,
     version: game.version,
     fen: game.currentFen,
     lastMove,
     missedMoves,
+    evals,
     white: game.white,
     black: game.black,
     tournament: game.tournament,

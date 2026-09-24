@@ -22,6 +22,8 @@ const item = (id: string, result = "*"): GameListItem => ({
   fen: "fen",
   version: 3,
   updatedAt: "2026-09-23T12:00:00.000Z",
+  evalCp: null,
+  evalMate: null,
 });
 
 describe("parseStatus", () => {

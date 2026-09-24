@@ -23,6 +23,9 @@ export interface StreamFields extends Record<string, string> {
   version: string;
   // Game Result, only on GameResult events; empty otherwise.
   result: string;
+  // Eval from White's side, only on EvalUpdated events; empty otherwise.
+  evalCp: string;
+  evalMate: string;
 }
 
 export interface CacheFields extends Record<string, string> {
@@ -30,6 +33,14 @@ export interface CacheFields extends Record<string, string> {
   version: string;
   lastPly: string;
   lastSan: string;
+}
+
+// Latest eval in the cache hash, next to the checkpoint fields.
+export interface EvalCacheFields extends Record<string, string> {
+  evalPly: string;
+  evalVersion: string;
+  evalCp: string;
+  evalMate: string;
 }
 
 // Board-position snapshot attached to every outbox payload by the
@@ -48,7 +59,7 @@ export interface CheckpointFields {
 export function buildWrites(row: {
   eventType: string;
   payload: Record<string, unknown>;
-}): { stream: StreamFields; cacheKey: string; cache: CacheFields } {
+}): { stream: StreamFields; cacheKey: string; cache: CacheFields | EvalCacheFields | null } {
   const str = (v: unknown): string => String(v ?? "");
   const gameId = str(row.payload["gameId"]);
   const stream: StreamFields = {
@@ -60,7 +71,18 @@ export function buildWrites(row: {
     clock: str(row.payload["clock"]),
     version: str(row.payload["version"]),
     result: str(row.payload["result"]),
+    evalCp: str(row.payload["evalCp"]),
+    evalMate: str(row.payload["evalMate"]),
   };
+  // An eval never moves the board, so it must not touch the checkpoint
+  // fields. Only the newest ply's eval is cached, for the resync fast path.
+  if (row.eventType === "EvalUpdated") {
+    const cache: EvalCacheFields | null =
+      row.payload["latest"] === true
+        ? { evalPly: stream.ply, evalVersion: stream.version, evalCp: stream.evalCp, evalMate: stream.evalMate }
+        : null;
+    return { stream, cacheKey: cacheKey(gameId), cache };
+  }
   // Cache follows the checkpoint snapshot, never the event itself, so a
   // correction to an older ply cannot rewind the cached board position.
   // Rows written before the checkpoint existed fall back to the event.
@@ -105,7 +127,7 @@ export async function pollOnce(
     const payload = row.payload as Record<string, unknown>;
     const writes = buildWrites({ eventType: row.eventType, payload });
     await redis.xadd(STREAM, writes.stream);
-    await redis.hset(writes.cacheKey, writes.cache);
+    if (writes.cache) await redis.hset(writes.cacheKey, writes.cache);
     await database
       .update(outboxEvents)
       .set({ published: true })

@@ -1,8 +1,15 @@
-import type { GameStateResponse } from "@/types"
+import type { EvalRow, GameStateResponse } from "@/types"
 
 // Pure live-board state. Version is the only ordering authority: the
 // client applies events and resync snapshots, and never guesses or
 // patches locally (a gap always means resync, same rule as the server).
+
+// Eval from White's side: centipawns, or mate in N (+ White mates,
+// - Black mates, 0 the side to move is checkmated).
+export interface MoveEval {
+  cp: number | null
+  mate: number | null
+}
 
 export interface LiveMove {
   ply: number
@@ -11,6 +18,8 @@ export interface LiveMove {
   // Mover's remaining time after this move, when the source has it.
   clock: string | null
   version: number
+  // Set once the server's eval worker has analyzed the position.
+  eval?: MoveEval
 }
 
 export interface GameState {
@@ -38,6 +47,8 @@ export interface LiveEvent {
   version: number
   // Only on GameResult events.
   result: string | null
+  // Only on EvalUpdated events.
+  eval: MoveEval | null
 }
 
 // Parse one raw WebSocket message for this game. Null when the payload
@@ -64,7 +75,26 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     clock: typeof r["clock"] === "string" && r["clock"] !== "" ? r["clock"] : null,
     version,
     result: typeof r["result"] === "string" && r["result"] !== "" ? r["result"] : null,
+    eval: parseEval(r["evalCp"], r["evalMate"]),
   }
+}
+
+function parseEval(rawCp: unknown, rawMate: unknown): MoveEval | null {
+  const num = (raw: unknown): number | null =>
+    typeof raw === "string" && raw !== "" && Number.isInteger(Number(raw)) ? Number(raw) : null
+  const cp = num(rawCp)
+  const mate = num(rawMate)
+  return cp === null && mate === null ? null : { cp, mate }
+}
+
+// Attach evals to the moves they were computed for. An eval for an older
+// version of a ply (since corrected) is ignored.
+function withEvals(moves: Map<number, LiveMove>, evals: EvalRow[] = []): Map<number, LiveMove> {
+  for (const e of evals) {
+    const move = moves.get(e.ply)
+    if (move && move.version === e.version) moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate } })
+  }
+  return moves
 }
 
 // Full snapshot (GET since_version=0): missedMoves carry the whole live
@@ -72,6 +102,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
 export function fromSnapshot(res: GameStateResponse): GameState {
   const moves = new Map<number, LiveMove>()
   for (const m of res.missedMoves) moves.set(m.ply, { ...m })
+  withEvals(moves, res.evals)
   return {
     version: res.version,
     fen: res.fen,
@@ -103,6 +134,7 @@ export function applyResync(state: GameState, res: GameStateResponse): GameState
   for (const ply of [...moves.keys()]) {
     if (ply > lastPly) moves.delete(ply)
   }
+  withEvals(moves, res.evals)
   return {
     version: res.version,
     fen: res.fen,
@@ -127,6 +159,15 @@ export type EventOutcome = { state: GameState } | { resync: true }
 //   rewind the position, same rule as the server)
 // - anything newer: gap, the caller must resync instead of guessing
 export function applyEvent(state: GameState, ev: LiveEvent, now = Date.now()): EventOutcome {
+  // Evals do not bump Version (ADR 0006): here ev.version is the move
+  // row's Version, and the eval only lands on that exact move.
+  if (ev.type === "EvalUpdated") {
+    const move = state.moves.get(ev.ply)
+    if (!move || move.version !== ev.version || !ev.eval) return { state }
+    const moves = new Map(state.moves)
+    moves.set(ev.ply, { ...move, eval: ev.eval })
+    return { state: { ...state, moves } }
+  }
   if (ev.version <= state.version) return { state }
   if (ev.version > state.version + 1) return { resync: true }
   // The game's Result changed (usually it ended). No move, no new position.

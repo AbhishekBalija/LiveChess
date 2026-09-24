@@ -6,6 +6,8 @@ import { ChessBoard } from "@/components/ChessBoard"
 import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
+import { EvalBar } from "@/components/EvalBar"
+import { barPercent, currentEval, formatEval } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
 import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
 import { resultLine, splitTournamentName } from "@/lib/names"
@@ -72,6 +74,10 @@ export function BoardView() {
     white: runningClock(lastClocks.white, running && toMove === "white", state.lastMoveAt, now),
     black: runningClock(lastClocks.black, running && toMove === "black", state.lastMoveAt, now),
   }
+  // Engine eval of the current position (ADR 0006), once the worker has it.
+  // A finished game's bar shows the result instead, with no number.
+  const evalNow = currentEval(state)
+  const evalText = !finished && evalNow ? formatEval(evalNow) : null
   const white = state.white ?? "White"
   const black = state.black ?? "Black"
   const statusText = finished
@@ -110,6 +116,16 @@ export function BoardView() {
           {/* Desktop: never taller than the screen under the scoreboard. */}
           <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
             <ChessBoard fen={state.fen} highlight={highlight} palette={palette} />
+            <div className="mt-2.5 flex items-center gap-3 md:mt-3.5">
+              <EvalBar
+                whitePercent={barPercent(state.result, evalNow, state.lastPly)}
+                label={evalText}
+                className="h-1.5 flex-1 rounded-full"
+              />
+              {evalText && (
+                <span className="w-12 text-right font-mono text-xs font-semibold text-muted-foreground">{evalText}</span>
+              )}
+            </div>
           </div>
           <PhonePlayer side="white" name={white} clock={clocks.white} active={!finished && toMove === "white"} />
           <p className={`px-5 pt-1 text-sm font-bold md:hidden ${finished ? "text-win" : "text-gold"}`}>{statusText}</p>

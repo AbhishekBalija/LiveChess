@@ -65,6 +65,13 @@ export const moves = pgTable(
     // Version at insert time. Corrections bump Version without a new Ply,
     // so ordering by ply alone cannot answer "moves since version X".
     version: integer("version").notNull(),
+    // Eval of the position after this move, from White's point of view
+    // (ADR 0006). Mate is signed: +3 means White mates in 3, and 0 means
+    // the side to move in `fen` is checkmated. Null until the eval worker
+    // has run; eval_source says which source produced it.
+    evalCp: integer("eval_cp"),
+    evalMate: integer("eval_mate"),
+    evalSource: text("eval_source"),
   },
   // One live row per identity key. Superseded history rows are exempt,
   // otherwise a correction could never coexist with the row it replaces.
@@ -73,6 +80,11 @@ export const moves = pgTable(
       .on(t.gameId, t.ply, t.source)
       .where(sql`"moves"."superseded" = false`),
     index("moves_game_version_idx").on(t.gameId, t.version),
+    // The eval worker's to-do list: live moves with no eval yet. Stays
+    // small once the backlog is done, like the outbox index.
+    index("moves_needs_eval_idx")
+      .on(t.gameId, t.ply)
+      .where(sql`"moves"."superseded" = false and "moves"."eval_source" is null`),
   ],
 );
 

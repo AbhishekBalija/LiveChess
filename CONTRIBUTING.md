@@ -6,13 +6,14 @@ pull request looks like.
 ## Setup
 
 Prerequisites: [Bun](https://bun.sh), Postgres and Redis running locally.
+Optional: Stockfish (`brew install stockfish`) for the eval worker.
 The [README](README.md#run-locally) has the full steps; in short:
 
 ```sh
 cp server/.env.example server/.env        # add a free Lichess token, see README
 (cd server && bun install && bun run migrate)
 (cd client && bun install)
-bun run dev                               # gateway, publisher, client and supervisor
+bun run dev                               # gateway, publisher, client, supervisor (+ eval with Stockfish)
 ```
 
 Open http://localhost:5173.

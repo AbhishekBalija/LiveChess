@@ -28,6 +28,7 @@ describe("getGameState cache fast path", () => {
   it("serves an up-to-date client from cache without touching Postgres", async () => {
     let dbCalls = 0;
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => {
         dbCalls += 1;
         throw new Error("must not hit Postgres on cache fast path");
@@ -48,8 +49,27 @@ describe("getGameState cache fast path", () => {
       fen: "fen-2",
       lastMove: { ply: 2, san: "e5" },
       missedMoves: [],
+      evals: [],
     });
     expect(dbCalls).toBe(0);
+  });
+
+  it("returns the cached newest-ply eval on the fast path", async () => {
+    const cache: StateCachePort = {
+      hgetall: async () => ({
+        fen: "fen-2",
+        version: "2",
+        lastPly: "2",
+        lastSan: "e5",
+        evalPly: "2",
+        evalVersion: "2",
+        evalCp: "",
+        evalMate: "-3",
+      }),
+    };
+    const db = {} as StateDbPort;
+    const res = await getGameState(db, cache, GID, 2);
+    expect(res.evals).toEqual([{ ply: 2, version: 2, cp: null, mate: -3 }]);
   });
 
   it("goes to Postgres when the client is behind the cache", async () => {
@@ -58,6 +78,7 @@ describe("getGameState cache fast path", () => {
       { ply: 2, san: "e5", fen: "fen-2", clock: null, version: 2 },
     ];
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({
         id: GID,
         version: 2,
@@ -82,6 +103,7 @@ describe("getGameState cache fast path", () => {
 
   it("goes to Postgres on cache miss", async () => {
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({ id: GID, version: 1, currentFen: "fen-1", lastPly: 1 }),
       findLiveMove: async () => ({ ply: 1, san: "e4" }),
       listLiveMovesSince: async () => [{ ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1 }],
@@ -90,8 +112,24 @@ describe("getGameState cache fast path", () => {
     expect(res.missedMoves).toHaveLength(1);
   });
 
+  it("returns every stored eval on the Postgres path, not only missed moves", async () => {
+    const evals = [
+      { ply: 1, version: 1, cp: 30, mate: null },
+      { ply: 2, version: 2, cp: 25, mate: null },
+    ];
+    const db: StateDbPort = {
+      listEvals: async () => evals,
+      findGame: async () => ({ id: GID, version: 2, currentFen: "fen-2", lastPly: 2 }),
+      findLiveMove: async () => ({ ply: 2, san: "e5" }),
+      listLiveMovesSince: async () => [],
+    };
+    const res = await getGameState(db, missCache, GID, 2);
+    expect(res.evals).toEqual(evals);
+  });
+
   it("returns null lastMove for a game with no moves yet", async () => {
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({ id: GID, version: 0, currentFen: "", lastPly: 0 }),
       findLiveMove: async () => {
         throw new Error("no move lookup for lastPly 0");
@@ -106,6 +144,7 @@ describe("getGameState cache fast path", () => {
   it("treats a malformed cache hash as a miss", async () => {
     const bad: StateCachePort = { hgetall: async () => ({ fen: "x" }) };
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({ id: GID, version: 1, currentFen: "fen-1", lastPly: 1 }),
       findLiveMove: async () => ({ ply: 1, san: "e4" }),
       listLiveMovesSince: async () => [],
@@ -118,6 +157,7 @@ describe("getGameState cache fast path", () => {
 describe("getGameState validation", () => {
   it("throws 404 for an unknown game", async () => {
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => null,
       findLiveMove: async () => null,
       listLiveMovesSince: async () => [],
@@ -133,6 +173,7 @@ describe("getGameState validation", () => {
   it("throws 404 for a non-UUID id without touching backends", async () => {
     let calls = 0;
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => {
         calls += 1;
         return null;
@@ -163,6 +204,7 @@ describe("getGameState validation", () => {
 
   it("throws 400 for non-integer or negative sinceVersion", async () => {
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({ id: GID, version: 1, currentFen: "f", lastPly: 1 }),
       findLiveMove: async () => ({ ply: 1, san: "e4" }),
       listLiveMovesSince: async () => [],
@@ -189,6 +231,7 @@ describe("getGameState validation", () => {
 
   it("passes live rows through in version order with the corrected SAN", async () => {
     const db: StateDbPort = {
+      listEvals: async () => [],
       findGame: async () => ({ id: GID, version: 3, currentFen: "fen-2", lastPly: 2 }),
       findLiveMove: async () => ({ ply: 2, san: "e5" }),
       listLiveMovesSince: async () => [

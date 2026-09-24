@@ -24,6 +24,10 @@ export interface GameListItem {
   fen: string;
   version: number;
   updatedAt: string;
+  // Eval of the current position from White's side (ADR 0006), null until
+  // the eval worker has reached it.
+  evalCp: number | null;
+  evalMate: number | null;
 }
 
 export interface GamesDbPort {
@@ -97,6 +101,8 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
           lastSan: moves.san,
           lastClock: moves.clock,
           prevClock: prev.clock,
+          evalCp: moves.evalCp,
+          evalMate: moves.evalMate,
           fen: games.currentFen,
           version: games.version,
           updatedAt: games.updatedAt,
@@ -134,6 +140,8 @@ export function drizzleGamesDb(database: Db): GamesDbPort {
         fen: r.fen,
         version: r.version,
         updatedAt: r.updatedAt.toISOString(),
+        evalCp: r.evalCp,
+        evalMate: r.evalMate,
       }));
     },
   };

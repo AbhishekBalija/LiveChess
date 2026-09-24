@@ -14,7 +14,8 @@
     "seed": "bun scripts/seed.ts",
     "sim": "bun scripts/sim.ts",
     "ingest": "bun src/ingestion/worker.ts",
-    "supervisor": "bun src/ingestion/supervisor.ts"
+    "supervisor": "bun src/ingestion/supervisor.ts",
+    "eval": "bun src/eval/index.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

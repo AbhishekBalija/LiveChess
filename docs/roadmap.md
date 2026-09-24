@@ -79,10 +79,12 @@ Nothing new for fans; make what exists trustworthy and public.
       Finished tab (#19); board page game-over state (Finished badge,
       winner and score, clocks stopped), pushed live by a `GameResult`
       event when the source's Result changes
-- Eval: server Stockfish worker plus the Lichess tablebase, latest ply
-  first then backfill, stored per move and pushed live (ADR 0006,
-  research in `docs/research/eval-options.md`)
-- Win-probability bar from eval
+- [x] Eval: server Stockfish worker plus the Lichess tablebase, latest ply
+      first then backfill, stored per move and pushed live, with the
+      current eval shown on the board page (ADR 0006, research in
+      `docs/research/eval-options.md`)
+- [x] Win-probability bar from eval: under the board and on home match
+      cards, as in the Matchday design
 - Multi-board grid: watch a whole round at once
 
 ## Slice 3: AI coverage

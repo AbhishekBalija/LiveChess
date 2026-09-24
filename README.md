@@ -21,6 +21,7 @@ broadcasts. "CREX, but for chess."
 - **Live boards, no refresh**: moves arrive over WebSocket seconds after they are played, and pieces slide into place.
 - **Ticking clocks**: the side to move's clock runs between moves, from each player's real `%clk`.
 - **Follows Lichess by itself**: a supervisor picks up every live broadcast round, streams it, and stores every result when it ends.
+- **Engine eval**: every move is analyzed by Stockfish on the server (endgames with 7 pieces or fewer come exact from the Lichess tablebase), and a win-probability bar under each board and on every match card swings as the eval changes.
 - **Starting soon**: upcoming rounds with local start times and countdowns.
 - **Built for patchy mobile data**: resync by version after any gap, reconnect with backoff, takebacks and corrections handled.
 - **Each game its own board**: six board palettes, picked per game so a page of boards never looks the same.
@@ -52,7 +53,9 @@ are recorded in [`docs/adr/`](docs/adr), the domain language in
 
 ## Run locally
 
-Prereqs: Bun, Postgres, Redis.
+Prereqs: Bun, Postgres, Redis. Optional: [Stockfish](https://stockfishchess.org)
+for engine eval (`brew install stockfish` or `apt install stockfish`); without
+it everything else still runs.
 
 ```sh
 cp server/.env.example server/.env   # edit only if your Postgres differs
@@ -74,6 +77,12 @@ bun run dev              # gateway + publisher + client + supervisor (follows li
 bun run dev <roundId>    # follow one Lichess broadcast round instead of the supervisor
 bun run dev --no-ingest  # gateway + publisher + client only
 ```
+
+When Stockfish is installed, `bun run dev` also starts the eval worker
+(`bun run eval` in `server/`, ADR 0006). It analyzes each game's newest
+move first, then fills in older ones; `EVAL_NODES` sets how hard it
+searches each position. Stockfish is GPL-3.0 and runs as a separate
+program; it is not part of this repository.
 
 The supervisor reads Lichess's active broadcasts every 5 minutes and
 follows up to 8 ongoing rounds (`SUPERVISOR_MAX_ROUNDS`), streaming 2 of
@@ -105,7 +114,7 @@ cd server && bun run sim 123e4567-e89b-12d3-a456-426614174000 [--correct]
 ```
 
 Each service can still be started on its own (`bun run gateway`,
-`bun run publisher`, `bun run ingest <roundId>` in `server/`, `bun run dev`
+`bun run publisher`, `bun run eval`, `bun run ingest <roundId>` in `server/`, `bun run dev`
 in `client/`).
 
 Open http://localhost:5173, pick a game, and watch a ply land every 2s.
