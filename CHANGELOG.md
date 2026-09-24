@@ -6,6 +6,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Home no longer shows every live game twice: the card strip keeps the
+  first 12, and "More live boards" becomes a short section per event (4
+  boards on desktop, 2 on phones; up to 8 on a competition tab) with
+  "Watch all" into that event's grid. Headings carry the event's subtitle,
+  so the tours Lichess splits one event into can be told apart.
+
 ### Added
 - Board page (#49):
   - A thick eval bar exactly the board's width, saying who is better in

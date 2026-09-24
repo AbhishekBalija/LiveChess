@@ -15,7 +15,13 @@ import type { GameListItem } from "@/types"
 
 // Home (issue #19, Matchday design). What is live comes first: a tab row
 // of competitions, a sideways strip of scoreboard cards, the featured
-// game, then every other live board, each in its own board colors.
+// game, then a few boards per event with a link to the full grid. With
+// 200 live games, showing every board here was a wall of boards.
+
+// How much of a long live list home shows before pointing to the grid.
+const STRIP_CARDS = 12
+const BOARDS_PER_EVENT = 4
+const BOARDS_ONE_EVENT = 8
 
 type Tab = { id: string; label: string; tournamentId?: string; finished?: boolean }
 
@@ -79,6 +85,7 @@ export function Home() {
           <LiveGames
             games={live.games?.filter((g) => !tab.tournamentId || g.tournament.id === tab.tournamentId) ?? null}
             startingSoon={tab.id === "live" ? <StartingSoon /> : null}
+            oneEvent={Boolean(tab.tournamentId)}
           />
         )}
       </main>
@@ -86,7 +93,15 @@ export function Home() {
   )
 }
 
-function LiveGames({ games, startingSoon }: { games: GameListItem[] | null; startingSoon: ReactNode }) {
+function LiveGames({
+  games,
+  startingSoon,
+  oneEvent,
+}: {
+  games: GameListItem[] | null
+  startingSoon: ReactNode
+  oneEvent: boolean
+}) {
   const now = useNow()
   if (games === null) {
     return (
@@ -111,25 +126,65 @@ function LiveGames({ games, startingSoon }: { games: GameListItem[] | null; star
   return (
     <>
       <Strip>
-        {games.map((g) => (
+        {games.slice(0, STRIP_CARDS).map((g) => (
           <MatchCard key={g.id} game={g} now={now} className="w-[300px] shrink-0 snap-start md:w-[330px]" />
         ))}
       </Strip>
       {startingSoon}
       {featured && <Featured game={featured} />}
-      {rest.length > 0 && (
-        <section aria-labelledby="more-boards" className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
-          <h2 id="more-boards" className="text-[17px] font-bold md:text-lg">More live boards</h2>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4">
-            {rest.map((g) => (
-              <li key={g.id}>
-                <BoardTile game={g} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {byEvent(rest).map((event) => (
+        <EventBoardsPreview
+          key={event.id}
+          event={event}
+          heading={oneEvent ? "More live boards" : event.name}
+          limit={oneEvent ? BOARDS_ONE_EVENT : BOARDS_PER_EVENT}
+        />
+      ))}
     </>
+  )
+}
+
+type EventGroup = { id: string; name: string; subtitle: string | null; games: GameListItem[] }
+
+// Live games grouped by event, biggest event first.
+function byEvent(games: GameListItem[]): EventGroup[] {
+  const groups = new Map<string, EventGroup>()
+  for (const g of games) {
+    const { title, subtitle } = splitTournamentName(g.tournament.name)
+    const group = groups.get(g.tournament.id) ?? { id: g.tournament.id, name: title, subtitle, games: [] }
+    group.games.push(g)
+    groups.set(g.tournament.id, group)
+  }
+  return [...groups.values()].sort((a, b) => b.games.length - a.games.length)
+}
+
+// A few boards of one event, and a link to all of them in the grid.
+// The subtitle tells apart events Lichess splits into several tours
+// (an Olympiad's "Open · Matches 1-12" and "Matches 63-87").
+function EventBoardsPreview({ event, heading, limit }: { event: EventGroup; heading: string; limit: number }) {
+  const shown = event.games.slice(0, limit)
+  const headingId = `event-${event.id}`
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-4 px-4 md:px-8 lg:px-12">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id={headingId} className="flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-3">
+          <span className="truncate text-[17px] font-bold md:text-lg">{heading}</span>
+          {event.subtitle && <span className="truncate text-sm text-muted-foreground">{event.subtitle}</span>}
+        </h2>
+        <Link to={`/events/${event.id}`} className="shrink-0 text-sm font-semibold whitespace-nowrap">
+          Watch all
+        </Link>
+      </div>
+      <ul className="grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
+        {shown.map((g, i) => (
+          // Below desktop each event shows one row of two boards; the rest
+          // are one tap away in the grid.
+          <li key={g.id} className={i >= 2 && limit === BOARDS_PER_EVENT ? "hidden lg:block" : undefined}>
+            <BoardTile game={g} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
