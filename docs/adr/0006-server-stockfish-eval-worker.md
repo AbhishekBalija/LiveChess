@@ -45,6 +45,11 @@ live ply, with no paid service involved. The research, with sources, is in
 - **Organizer `[%eval]` from the PGN (rejected):** present only in engine
   broadcasts such as TCEC, and a different engine and depth from ours.
   Using one source keeps every stored number comparable.
+- **chess-api.com, a free hosted Stockfish (rejected as the source):**
+  it stops each search after a short time, so the same position came back
+  at different depths with different evals, and it is a one-person
+  service with no stated limits or terms. It stays a possible emergency
+  fallback if our VM is too slow for the live bar.
 - **Stockfish in the browser (rejected):** nothing is stored for the
   classifier, battery and CPU cost land on phones, and a multi-board grid
   would run many engines on one device.

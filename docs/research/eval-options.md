@@ -379,6 +379,25 @@ with `12. Bxf6 { [%eval 0.23] }` as the example. This confirms Option 1:
 Lichess passes along whatever eval the source feed contains and does not
 compute any itself.
 
+**chess-api.com** (not Lichess, checked 2026-09-24): a free hosted
+Stockfish 18 API (`POST https://chess-api.com/v1`, also a WebSocket) run
+by one person, funded by donations. Its page caps free requests at depth
+18 and `maxThinkingTime` 100 ms, and documents no rate limits, terms of
+use or uptime promise. Two live requests for the same middlegame position
+each stopped at 50 ms, reaching depth 15 and then depth 16, with
+different best moves and evals (-3.96, then -3.81). So:
+
+- It is time-limited, which breaks the "same position, same eval"
+  property a fixed node count gives us, and the classifier would see
+  noise between plies.
+- Depth 15 or 16 is roughly what our own worker would reach anyway.
+- Sending every ply of 8 rounds of 100+ games to a one-person free service
+  with no stated limits could get us blocked at any time, and would not
+  be fair use of it.
+
+Worth keeping in mind only as an emergency fallback if the free VM turns
+out too slow to keep the live bar current. Not a primary source.
+
 ---
 
 ## Comparison table
