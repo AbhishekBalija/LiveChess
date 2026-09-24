@@ -398,6 +398,28 @@ different best moves and evals (-3.96, then -3.81). So:
 Worth keeping in mind only as an emergency fallback if the free VM turns
 out too slow to keep the live bar current. Not a primary source.
 
+**stockfish.online** (checked 2026-09-24): a free Stockfish 17.1 REST API
+by Jacute Technologies (`GET https://stockfish.online/api/s/v2.php?fen=...&depth=N`).
+Its docs limit depth to under 16 and state no rate limits; terms are in a
+separate license file. Two live requests for the same position took 2.1 s
+and 1.6 s and returned the same answer (-1.49), so it looks
+depth-limited and probably cached. Too slow for hundreds of live games (one
+position per ~2 s per request), and depth 15 is again no better than our
+own worker. Not a primary source.
+
+**chessdb.cn** (Chess Cloud Database, checked 2026-09-24): a huge
+precomputed position database
+(`GET https://www.chessdb.cn/cdb.php?action=querypv&board=<FEN>&json=1`).
+It knew both middlegame positions tried, answered instantly, and agreed
+with Stockfish on one of them (-148 vs -1.49 from stockfish.online). Its
+API page documents no rate limits, terms, operator or engine, and returns
+`unknown` for positions it does not have. Coverage looks much wider than
+the Lichess cloud eval, but its scores come from mixed and unstated search
+depths, which raises the same fake-swing problem for the classifier as
+cloud eval. Unverified: who runs it and which engine produces the scores.
+Could be a better option than Lichess cloud eval if we ever add a
+precomputed source for round-start bursts.
+
 ---
 
 ## Comparison table
