@@ -7,6 +7,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Games people have open are analyzed first: the gateway tells the eval
+  worker which games have viewers, and their moves jump the queue, newest
+  first, so stepping back through a game fills in within a minute or two
+  instead of showing unanalyzed positions for hours.
+
+### Removed
+- The eval graph on the board page (owner feedback); the move list gets
+  its height back.
+
+### Changed
 - Home is calmer (#50): the card strip keeps the first 12 games and has
   no visible scrollbar (swipe or trackpad, plus arrow buttons on desktop),
   and the wall of boards under the featured game is replaced by a "Live

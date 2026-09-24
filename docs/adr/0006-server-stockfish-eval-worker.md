@@ -22,6 +22,14 @@ live ply, with no paid service involved. The research, with sources, is in
   newest position without an eval first, so the live bar stays current,
   and fills in older plies when it has nothing newer to do. Every ply
   gets an eval eventually, which the classifier needs.
+- **Watched games first** (added after launch): a game someone has open
+  jumps the queue, newest ply first, then the newest ply of every other
+  game, then the backlog. Without it, stepping back through a game showed
+  unanalyzed positions for hours while the worker worked through other
+  games. The gateway, which knows the WebSocket subscriptions, keeps a
+  Redis sorted set of open games (`livechess:watched`); this is viewer
+  bookkeeping, not game data, so ADR 0003's single writer for the stream
+  and cache still holds.
 - **The eval belongs to the move row.** It is stored on the `moves` row
   it was computed for. A result is thrown away only if that row was
   superseded (Correction or Truncation) while the search ran. A newer

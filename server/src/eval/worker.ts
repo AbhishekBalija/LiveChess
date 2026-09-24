@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { validateFen } from "chess.js";
 import type { Db } from "../db/client";
 import { games, moves, outboxEvents } from "../db/schema";
@@ -21,12 +21,17 @@ export interface EvalJob {
   latest: boolean;
 }
 
-// Latest first, then backfill: a game's newest ply beats any older ply,
-// and among those the most recently active game goes first.
+// Order of work:
+// 1. games someone has open (`watched`), newest ply first, so stepping back
+//    through a game you are looking at fills in within a minute or two
+// 2. the newest ply of every other game, so live bars stay current
+// 3. everything else (backfill), most recently active game first
 // ponytail: sorts the whole backlog on each pick; fine while the backlog
 // is thousands of rows, keep a "latest" pass separate if it grows past that.
-export async function nextJob(database: Db): Promise<EvalJob | null> {
+export async function nextJob(database: Db, watched: string[] = []): Promise<EvalJob | null> {
   const latest = sql<boolean>`${moves.ply} = ${games.lastPly}`;
+  const order = [desc(latest), desc(games.updatedAt), desc(moves.ply)];
+  if (watched.length > 0) order.unshift(desc(inArray(moves.gameId, watched)));
   const [row] = await database
     .select({
       moveId: moves.id,
@@ -39,7 +44,7 @@ export async function nextJob(database: Db): Promise<EvalJob | null> {
     .from(moves)
     .innerJoin(games, eq(games.id, moves.gameId))
     .where(and(eq(moves.superseded, false), isNull(moves.evalSource)))
-    .orderBy(desc(latest), desc(games.updatedAt), desc(moves.ply))
+    .orderBy(...order)
     .limit(1);
   return row ?? null;
 }
@@ -108,8 +113,8 @@ export async function saveEval(database: Db, job: EvalJob, result: EvalResult): 
 
 // One step of the loop: evaluate and store the next job. False when there
 // was nothing to do, so the caller can wait before asking again.
-export async function evalOnce(database: Db, evaluator: Evaluator): Promise<boolean> {
-  const job = await nextJob(database);
+export async function evalOnce(database: Db, evaluator: Evaluator, watched: string[] = []): Promise<boolean> {
+  const job = await nextJob(database, watched);
   if (!job) return false;
   await saveEval(database, job, await evaluator.evaluate(job.fen));
   return true;

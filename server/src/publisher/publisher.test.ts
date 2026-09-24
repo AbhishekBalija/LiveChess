@@ -74,9 +74,16 @@ describe("seam 2 contract", () => {
       { encoding: "utf8" },
     );
     const files = out.split("\n").map((l) => l.trim()).filter(Boolean);
-    // Writer (XADD + HSET) and reader (XREADGROUP + XACK) are the only
-    // Redis touchpoints. Move Handler, adapter, and db layers stay clean.
-    expect(files.sort()).toEqual(["src/gateway/index.ts", "src/publisher/index.ts"]);
+    // Game data: the publisher writes (XADD + HSET), the gateway reads
+    // (XREADGROUP + XACK). Viewer bookkeeping (which games are open, ADR
+    // 0006) is its own key, shared by the gateway and the eval worker.
+    // Move Handler, adapter, and db layers stay clean.
+    expect(files.sort()).toEqual([
+      "src/eval/index.ts",
+      "src/eval/watched.ts",
+      "src/gateway/index.ts",
+      "src/publisher/index.ts",
+    ]);
     const gateway = execSync("grep -n 'xadd\\|hset' src/gateway/index.ts || true", {
       encoding: "utf8",
     }).trim();

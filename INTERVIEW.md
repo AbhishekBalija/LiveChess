@@ -41,6 +41,9 @@ With a time limit, the same position gets a deeper search on a quiet server and 
 **Q: How does the worker pick what to analyze without a job queue?**
 Its to-do list is a query: live moves with no eval yet, a game's newest move first, most recently active games first, older moves after. A partial index keeps it small once the backlog is done. No queue state means a restart just carries on, and nothing can get lost between a queue and the database. When the worker saves a result it updates the move only if it is still live; if a correction superseded it mid-search, the update matches nothing and the result is dropped.
 
+**Q: How does the eval worker know which games matter most right now?**
+It asks who is watching. The gateway already knows every WebSocket subscription, so every 10 seconds (and on each new subscribe) it writes the open game ids into a Redis sorted set with the time as the score. The worker reads the ids seen in the last minute and sorts its to-do query by "is watched" first. It is a priority queue driven by viewers instead of a fixed order, with no new service: if Redis is down, the worker just loses the priority, never the work.
+
 **Q: The eval worker publishes events too. Why does an eval not bump the game's Version?**
 Version orders changes to the game itself, and a gap in it makes the client resync. Evals arrive late and out of order by design (newest move first, older ones backfilled), so putting them on Version would make clients see "gaps" and resync all the time over something that did not change the game at all. Instead, the eval event names the move row's own Version, and the client only attaches it to that exact move: an eval computed for a move that was later corrected is simply ignored. The trade-off is that resync cannot find missed evals by version, so it returns the game's stored evals separately.
 

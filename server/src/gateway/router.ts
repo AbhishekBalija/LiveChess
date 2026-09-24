@@ -35,6 +35,13 @@ export class Router {
     this.subs.delete(conn);
   }
 
+  // Games that someone has open right now.
+  watchedGames(): Set<string> {
+    const out = new Set<string>();
+    for (const games of this.subs.values()) for (const id of games) out.add(id);
+    return out;
+  }
+
   connectionCount(): number {
     return this.subs.size;
   }
