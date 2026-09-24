@@ -33,22 +33,85 @@ export interface OngoingRound {
 }
 
 // Ongoing rounds from the active broadcasts, in Lichess's order.
+// Lichess lists one tour per group, but big events are split into many
+// tours (the Olympiad: Open "Matches 1-12", "13-37"..., Women "1-25"...).
+// For each group we also follow the first live tour of every other
+// section (Women next to Open), right after the listed one; lower match
+// groups are left out so one event cannot take every slot (#48).
 export async function fetchOngoingRounds(http: HttpPort): Promise<OngoingRound[]> {
   const res = await http.get(TOP_URL, "application/json");
   if (!res.ok) throw new Error(`broadcast list failed with ${res.status}`);
   const body = (await res.json()) as {
     active?: Array<{
-      tour?: { name?: unknown; info?: { format?: unknown } };
+      tour?: { id?: unknown; name?: unknown; info?: { format?: unknown } };
+      group?: unknown;
       round?: { id?: unknown; name?: unknown; ongoing?: unknown };
     }>;
   };
   const out: OngoingRound[] = [];
+  const seen = new Set<string>();
+  const add = (round: OngoingRound): void => {
+    if (seen.has(round.roundId)) return;
+    seen.add(round.roundId);
+    out.push(round);
+  };
   for (const b of body.active ?? []) {
     const id = b.round?.id;
     if (typeof id !== "string" || b.round?.ongoing !== true || isEngineEvent(b.tour)) continue;
-    out.push({ roundId: id, name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}` });
+    add({ roundId: id, name: `${String(b.tour?.name ?? "")} · ${String(b.round?.name ?? "")}` });
+    if (typeof b.group === "string" && typeof b.tour?.id === "string") {
+      try {
+        for (const round of await otherSectionRounds(http, b.tour.id)) add(round);
+      } catch (err) {
+        // The listed tour is still followed; the rest waits for next pass.
+        console.warn(`supervisor: could not expand group of ${b.tour.id}`, err);
+      }
+    }
   }
   return out;
+}
+
+const tourUrl = (tourId: string): string => `https://lichess.org/api/broadcast/${tourId}`;
+
+// "Open | Matches 1-12" and "Open | Matches 13-37" are one section.
+export function sectionOf(groupTourName: string): string {
+  return groupTourName.split(" | ")[0]?.trim() ?? groupTourName;
+}
+
+type TourResponse = {
+  tour?: { name?: unknown };
+  group?: { tours?: Array<{ id?: unknown; name?: unknown; live?: unknown }> };
+  rounds?: Array<{ id?: unknown; name?: unknown; ongoing?: unknown }>;
+};
+
+async function fetchTour(http: HttpPort, tourId: string): Promise<TourResponse> {
+  const res = await http.get(tourUrl(tourId), "application/json");
+  if (!res.ok) throw new Error(`broadcast ${tourId} failed with ${res.status}`);
+  return (await res.json()) as TourResponse;
+}
+
+// The first live tour of each section other than the listed tour's, and
+// each one's ongoing round.
+async function otherSectionRounds(http: HttpPort, listedTourId: string): Promise<OngoingRound[]> {
+  const tours = (await fetchTour(http, listedTourId)).group?.tours ?? [];
+  const listed = tours.find((t) => t.id === listedTourId);
+  const covered = new Set<string>(listed ? [sectionOf(String(listed.name ?? ""))] : []);
+  const picks: string[] = [];
+  for (const t of tours) {
+    const section = sectionOf(String(t.name ?? ""));
+    if (typeof t.id !== "string" || t.live !== true || covered.has(section)) continue;
+    covered.add(section);
+    picks.push(t.id);
+  }
+  const rounds: OngoingRound[] = [];
+  for (const tourId of picks) {
+    const tour = await fetchTour(http, tourId);
+    const round = tour.rounds?.find((r) => r.ongoing === true);
+    if (typeof round?.id === "string") {
+      rounds.push({ roundId: round.id, name: `${String(tour.tour?.name ?? "")} · ${String(round.name ?? "")}` });
+    }
+  }
+  return rounds;
 }
 
 // Which new rounds to start: ongoing ones we do not follow yet, while

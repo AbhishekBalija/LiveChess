@@ -6,7 +6,7 @@ import type { Db } from "../db/client";
 import * as schema from "../db/schema";
 import { games, moves, tournaments } from "../db/schema";
 import type { StreamPort } from "./stream";
-import { fetchOngoingRounds, roundsToStart, staleRoundIds, Supervisor, TOP_URL } from "./supervisor";
+import { fetchOngoingRounds, roundsToStart, sectionOf, staleRoundIds, Supervisor, TOP_URL } from "./supervisor";
 import type { HttpPort, HttpResponse } from "./worker";
 
 function json(body: unknown, status = 200): HttpResponse {
@@ -46,6 +46,59 @@ describe("fetchOngoingRounds", () => {
         }),
     };
     expect((await fetchOngoingRounds(http)).map((r) => r.roundId)).toEqual(["human001"]);
+  });
+});
+
+describe("split events (#48)", () => {
+  it("groups tours into sections by the part before the first bar", () => {
+    expect(sectionOf("Open | Matches 13-37")).toBe("Open");
+    expect(sectionOf("Women | Matches 1-25")).toBe("Women");
+    expect(sectionOf("GM-A")).toBe("GM-A");
+  });
+
+  it("also follows the first live tour of every other section, right after the listed one", async () => {
+    const group = {
+      tours: [
+        { id: "open0001", name: "Open | Matches 1-12", live: true },
+        { id: "open0002", name: "Open | Matches 13-37", live: true },
+        { id: "wom00001", name: "Women | Matches 1-25", live: true },
+        { id: "wom00002", name: "Women | Matches 26-50", live: true },
+      ],
+    };
+    const urls: string[] = [];
+    const http: HttpPort = {
+      get: async (url) => {
+        urls.push(url);
+        if (url === TOP_URL) {
+          return json({
+            active: [
+              { tour: { id: "open0001", name: "Olympiad | Open | Matches 1-12" }, group: "Olympiad", round: { id: "rOpen001", name: "Round 8", ongoing: true } },
+              { tour: { id: "club0001", name: "Club Open" }, round: { id: "rClub001", name: "Round 3", ongoing: true } },
+            ],
+          });
+        }
+        if (url.endsWith("/open0001")) return json({ tour: { name: "Olympiad | Open | Matches 1-12" }, group, rounds: [] });
+        if (url.endsWith("/wom00001")) {
+          return json({ tour: { name: "Olympiad | Women | Matches 1-25" }, group, rounds: [{ id: "rWomen01", name: "Round 8", ongoing: true }] });
+        }
+        throw new Error(`unexpected ${url}`);
+      },
+    };
+    const rounds = await fetchOngoingRounds(http);
+    expect(rounds.map((r) => r.roundId)).toEqual(["rOpen001", "rWomen01", "rClub001"]);
+    expect(rounds[1]?.name).toBe("Olympiad | Women | Matches 1-25 · Round 8");
+    // Lower match groups (Open 13-37, Women 26-50) are never fetched.
+    expect(urls.some((u) => u.endsWith("/open0002") || u.endsWith("/wom00002"))).toBe(false);
+  });
+
+  it("keeps the listed tour when expanding its group fails", async () => {
+    const http: HttpPort = {
+      get: async (url) =>
+        url === TOP_URL
+          ? json({ active: [{ tour: { id: "open0001", name: "Olympiad" }, group: "Olympiad", round: { id: "rOpen001", ongoing: true } }] })
+          : json({}, 500),
+    };
+    expect((await fetchOngoingRounds(http)).map((r) => r.roundId)).toEqual(["rOpen001"]);
   });
 });
 

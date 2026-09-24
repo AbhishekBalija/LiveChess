@@ -6,6 +6,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Split events are covered (#48): Lichess lists one tour per group, so the
+  supervisor only saw the Olympiad's "Open | Matches 1-12", missed Women
+  entirely, and dropped other Open tours it had picked up, leaving their
+  games frozen as live. It now also follows the first live tour of each
+  other section of a group (Women next to Open). Lower match groups stay
+  unfollowed so one event cannot take every slot.
+
 ### Changed
 - Engine-vs-engine events (TCEC and the like) are no longer followed or
   shown in "Starting soon" (#39): LiveChess covers human chess. They are
