@@ -6,17 +6,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed
-- Outbox and stream no longer grow forever (#33): the publisher prunes
-  published outbox rows hourly, keeping the newest 10,000
-  (`OUTBOX_KEEP_ROWS`), and caps the Redis stream at about 10,000
-  entries (`STREAM_MAXLEN`).
-- Dead WebSocket connections are detected (#34): the gateway sends a
-  heartbeat every 25s and drops sockets silent for 60s; the board page
-  reconnects and resyncs when it hears nothing for 60s.
+## [0.2.0] - 2026-09-24
 
-### Removed
-- Unused `server/src/ingestion/events.ts` zod schemas.
+Slice 1.5 and the start of Slice 2: LiveChess follows live Lichess
+broadcasts on its own, streams moves in seconds, and has its Matchday
+design.
 
 ### Added
 - Board page game-over state: a Finished badge, the winner and score in
@@ -58,7 +52,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (integration tests run against Postgres and Redis service containers),
   client lint, typecheck, tests and build.
 
+### Removed
+- Unused `server/src/ingestion/events.ts` zod schemas.
+
 ### Fixed
+- Outbox and stream no longer grow forever (#33): the publisher prunes
+  published outbox rows hourly, keeping the newest 10,000
+  (`OUTBOX_KEEP_ROWS`), and caps the Redis stream at about 10,000
+  entries (`STREAM_MAXLEN`).
+- Dead WebSocket connections are detected (#34): the gateway sends a
+  heartbeat every 25s and drops sockets silent for 60s; the board page
+  reconnects and resyncs when it hears nothing for 60s.
 - Numeric env settings are validated at startup: a typo like
   `INGEST_INTERVAL_MS=3s` used to become NaN and hot-loop against Lichess.
 - The gateway drops malformed WebSocket frames instead of throwing.
@@ -97,3 +101,7 @@ Slice 1: the live spine, verified against a live Lichess broadcast
 ### Fixed
 - Cache no longer rewinds the board on a correction to an older Ply.
 - Board rows stay equal height in sparse endgame positions.
+
+[Unreleased]: https://github.com/AbhishekBalija/LiveChess/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AbhishekBalija/LiveChess/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/AbhishekBalija/LiveChess/releases/tag/v0.1.0
