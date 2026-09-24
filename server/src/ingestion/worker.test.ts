@@ -336,6 +336,26 @@ describe.runIf(URL)("worker integration", () => {
     await sql.end();
   });
 
+  it("a Result change bumps Version and emits GameResult once", async () => {
+    sql = postgres(URL as string);
+    database = drizzle(sql, { schema });
+    // Same two plies as the previous test (v10), now with a final score.
+    currentPgn = PGN.replace(
+      "2. Nf3 { [%eval 0.2] [%clk 0:02:55] } 2... Nc6 { [%clk 0:02:57] } *",
+      "1-0",
+    ).replace('[Black "Beta"]', '[Black "Beta"]\n[Result "1-0"]');
+    const lastId = await maxOutboxId();
+    await ingestRound(database, http, "rrrrrrrr");
+    const gameA = await gameRow("aaaaaaaa");
+    expect(gameA).toMatchObject({ result: "1-0", version: 11, lastPly: 2 });
+    expect(await outboxTypesSince(gameA.id, lastId)).toEqual(["GameResult"]);
+    // Re-polling the finished game changes nothing.
+    await ingestRound(database, http, "rrrrrrrr");
+    expect(await gameVersion("aaaaaaaa")).toBe(11);
+    expect(await outboxTypesSince(gameA.id, lastId)).toEqual(["GameResult"]);
+    await sql.end();
+  });
+
   it("reuses a known game's tournament without fetching metadata", async () => {
     sql = postgres(URL as string);
     database = drizzle(sql, { schema });

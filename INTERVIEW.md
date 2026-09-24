@@ -19,6 +19,9 @@ The Outbox Publisher does both the Stream XADD and the cache update from the sam
 **Q: If published rows are never read again, how do you stop the outbox growing forever?**
 Prune them. The publisher deletes published rows outside the newest 10,000 ids once an hour; unpublished rows are never touched, so nothing waiting to go out can be lost. Keeping a row count instead of a time window avoided adding a `created_at` column and a migration. The Redis stream gets the same treatment with `XADD MAXLEN ~ 10000`: the `~` lets Redis trim whole internal blocks, which is far cheaper than an exact cap. A client that misses trimmed entries catches up through resync, so the cap cannot lose moves.
 
+**Q: A game's Result changes but no move is played. Why bump Version for that?**
+Because Version is the only thing clients use to order and gap-check events. The Result used to be written straight to `games.result` during the upsert, with no event: an open board page kept its clocks running until a reload. Now the result change goes through the same path as a move: the handler bumps Version, the row and a `GameResult` outbox row are written in one transaction, and the client applies it like any other event. It is applied after the plies in the same PGN, so the Result never arrives before the move that ended the game.
+
 ## WebSocket heartbeats
 
 **Q: What is a half-open connection and why does it matter for live updates?**

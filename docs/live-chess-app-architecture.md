@@ -87,6 +87,9 @@ different SAN at ply N, later plies exist → truncation to N (ADR 0004):
                                    Game.version += 1, emit GameTruncated
                                    then the correction/insert path above runs
                                    for ply N and any new plies after it
+source Result differs from stored → result change (after the plies):
+                                   Game.result set, Game.version += 1
+                                   emit GameResult, board position unchanged
 ```
 
 **Versioned jobs (solves both backpressure and the correction race):**

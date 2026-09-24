@@ -11,6 +11,7 @@ export interface LiveEvent {
   fen: string;
   clock: string;
   version: string;
+  result: string;
 }
 
 export interface Socket {

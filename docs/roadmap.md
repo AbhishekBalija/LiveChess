@@ -75,9 +75,10 @@ Nothing new for fans; make what exists trustworthy and public.
 
 - [x] Clocks: show remaining time per side, ticking locally for the side
       to move (delivered early with the Slice 1.5 design foundation, #19)
-- Results and finished games: result line on cards and the home Finished
-  tab are done (#19); the board page game-over state (result badge,
-  winner, clocks stopped) is not yet built
+- [x] Results and finished games: result line on cards and the home
+      Finished tab (#19); board page game-over state (Finished badge,
+      winner and score, clocks stopped), pushed live by a `GameResult`
+      event when the source's Result changes
 - Eval: approach decided in an ADR first (Lichess cloud eval, Stockfish in
   the viewer's browser, and/or a server worker), eval pushed live like moves
 - Win-probability bar from eval

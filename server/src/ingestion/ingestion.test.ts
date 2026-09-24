@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyMoveReceived, applyTruncate, emptyGame, planTruncation, START_FEN } from "./handler";
+import { applyMoveReceived, applyResultChange, applyTruncate, emptyGame, planTruncation, START_FEN } from "./handler";
 import {
   broadcastSlugs,
   fensForSans,
@@ -218,5 +218,25 @@ describe("illegal moves in a relayed PGN", () => {
 
   it("stops fensForSans at the first illegal move", () => {
     expect(fensForSans(["e4", "e5", "Ke3", "Nc6"])).toHaveLength(2);
+  });
+});
+
+describe("result changes", () => {
+  it("bumps Version once and keeps the board where it is", () => {
+    const state = emptyGame();
+    applyMoveReceived(state, { ply: 1, san: "e4", fen: "fen-1", clock: null, source: "lichess" });
+    const out = applyResultChange(state, "*", "1-0");
+    expect(out).toMatchObject({ version: 2, result: "1-0", lastPly: 1, fen: "fen-1", lastSan: "e4" });
+    expect(out?.outbox).toEqual({
+      eventType: "GameResult",
+      payload: { ply: 1, fen: "fen-1", version: 2, result: "1-0" },
+    });
+    expect(state.version).toBe(2);
+  });
+
+  it("does nothing when the Result is unchanged", () => {
+    const state = emptyGame();
+    expect(applyResultChange(state, "1-0", "1-0")).toBeNull();
+    expect(state.version).toBe(0);
   });
 });

@@ -36,6 +36,8 @@ export interface LiveEvent {
   fen: string
   clock: string | null
   version: number
+  // Only on GameResult events.
+  result: string | null
 }
 
 // Parse one raw WebSocket message for this game. Null when the payload
@@ -47,8 +49,9 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
   if (r["gameId"] !== gameId) return null
   const ply = Number(r["ply"])
   const version = Number(r["version"])
-  // A takeback can rewind all the way to the start position (ply 0).
-  const minPly = r["type"] === "GameTruncated" ? 0 : 1
+  // A takeback can rewind all the way to the start position (ply 0), and
+  // a game can end without a move (forfeit).
+  const minPly = r["type"] === "GameTruncated" || r["type"] === "GameResult" ? 0 : 1
   if (!Number.isInteger(ply) || ply < minPly) return null
   if (!Number.isInteger(version) || version < 1) return null
   if (typeof r["san"] !== "string" || typeof r["fen"] !== "string") return null
@@ -60,6 +63,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     fen: r["fen"],
     clock: typeof r["clock"] === "string" && r["clock"] !== "" ? r["clock"] : null,
     version,
+    result: typeof r["result"] === "string" && r["result"] !== "" ? r["result"] : null,
   }
 }
 
@@ -125,6 +129,10 @@ export type EventOutcome = { state: GameState } | { resync: true }
 export function applyEvent(state: GameState, ev: LiveEvent, now = Date.now()): EventOutcome {
   if (ev.version <= state.version) return { state }
   if (ev.version > state.version + 1) return { resync: true }
+  // The game's Result changed (usually it ended). No move, no new position.
+  if (ev.type === "GameResult") {
+    return { state: { ...state, version: ev.version, result: ev.result ?? state.result } }
+  }
   // Takeback (ADR 0004): drop every ply after ev.ply and rewind the board.
   if (ev.type === "GameTruncated") {
     const kept = new Map([...state.moves].filter(([ply]) => ply <= ev.ply))

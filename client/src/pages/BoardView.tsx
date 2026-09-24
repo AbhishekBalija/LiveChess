@@ -8,7 +8,7 @@ import { paletteFor } from "@/lib/boardPalette"
 import { runningClock, useNow } from "@/lib/clock"
 import { changedSquares, START_FEN } from "@/lib/fen"
 import { clocksOf, type GameState, type LiveMove } from "@/lib/game"
-import { splitTournamentName } from "@/lib/names"
+import { resultLine, splitTournamentName } from "@/lib/names"
 import { formatMove, moveNumber, sideToMove, type Side } from "@/lib/ply"
 import { useLiveGame, type ConnectionStatus } from "@/lib/useLiveGame"
 
@@ -62,8 +62,11 @@ export function BoardView() {
   const prevFen = state.lastPly > 1 ? state.moves.get(state.lastPly - 1)?.fen : START_FEN
   const highlight = lastMove && prevFen ? changedSquares(prevFen, state.fen) : undefined
   const lastMoveAgo = state.lastMoveAt !== null && state.lastPly > 0 ? timeAgo(now - state.lastMoveAt) : null
+  // A finished game: clocks stop, nobody is "to move", and the status
+  // line shows the result instead.
+  const finished = (state.result ?? "*") !== "*"
   // Only the side to move's clock runs, and only while the game is on.
-  const running = status === "live" && (state.result ?? "*") === "*" && state.lastPly > 0
+  const running = status === "live" && !finished && state.lastPly > 0
   const lastClocks = clocksOf(state)
   const clocks = {
     white: runningClock(lastClocks.white, running && toMove === "white", state.lastMoveAt, now),
@@ -71,13 +74,15 @@ export function BoardView() {
   }
   const white = state.white ?? "White"
   const black = state.black ?? "Black"
-  const statusText = lastMove
+  const statusText = finished
+    ? resultLine(state.result ?? "", white, black)
+    : lastMove
     ? `${toMove === "white" ? "White" : "Black"} to move after ${formatMove(lastMove.ply, lastMove.san)}`
     : "Waiting for the first move"
 
   return (
     <AppShell phoneChrome={false}>
-      <PhoneHeader eventLine={eventLine} status={status} />
+      <PhoneHeader eventLine={eventLine} status={status} finished={finished} />
 
       {/* Desktop: breadcrumb plus scoreboard */}
       <div className="hidden md:block">
@@ -90,24 +95,24 @@ export function BoardView() {
           aria-label="Scoreboard"
           className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 border-b border-border px-8 pt-7 pb-8 lg:px-12"
         >
-          <ScoreSide side="white" name={white} clock={clocks.white} active={toMove === "white"} />
+          <ScoreSide side="white" name={white} clock={clocks.white} active={!finished && toMove === "white"} />
           <div className="flex flex-col items-center gap-2 text-center">
-            <LiveBadge status={status} lastMoveAgo={lastMoveAgo} />
-            <span className="text-xl font-bold text-gold lg:text-[26px]">{statusText}</span>
+            <LiveBadge status={status} lastMoveAgo={lastMoveAgo} finished={finished} />
+            <span className={`text-xl font-bold lg:text-[26px] ${finished ? "text-win" : "text-gold"}`}>{statusText}</span>
           </div>
-          <ScoreSide side="black" name={black} clock={clocks.black} active={toMove === "black"} align="right" />
+          <ScoreSide side="black" name={black} clock={clocks.black} active={!finished && toMove === "black"} align="right" />
         </section>
       </div>
 
       <main className="mx-auto grid w-full max-w-[1440px] gap-6 pb-8 md:grid-cols-[minmax(0,640px)_minmax(0,1fr)] md:gap-10 md:px-8 md:pt-7 lg:px-12">
         <div className="flex flex-col">
-          <PhonePlayer side="black" name={black} clock={clocks.black} active={toMove === "black"} />
+          <PhonePlayer side="black" name={black} clock={clocks.black} active={!finished && toMove === "black"} />
           {/* Desktop: never taller than the screen under the scoreboard. */}
           <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
             <ChessBoard fen={state.fen} highlight={highlight} palette={palette} />
           </div>
-          <PhonePlayer side="white" name={white} clock={clocks.white} active={toMove === "white"} />
-          <p className="px-5 pt-1 text-sm font-bold text-gold md:hidden">{statusText}</p>
+          <PhonePlayer side="white" name={white} clock={clocks.white} active={!finished && toMove === "white"} />
+          <p className={`px-5 pt-1 text-sm font-bold md:hidden ${finished ? "text-win" : "text-gold"}`}>{statusText}</p>
         </div>
 
         <section aria-labelledby="moves-heading" className="flex min-w-0 flex-col gap-4 px-4 md:px-0">
@@ -128,8 +133,24 @@ function timeAgo(ms: number): string {
   return `${Math.floor(seconds / 60)}m ago`
 }
 
-function LiveBadge({ status, lastMoveAgo }: { status: ConnectionStatus; lastMoveAgo?: string | null }) {
+function LiveBadge({
+  status,
+  lastMoveAgo,
+  finished = false,
+}: {
+  status: ConnectionStatus
+  lastMoveAgo?: string | null
+  finished?: boolean
+}) {
   const live = status === "live"
+  if (finished && live) {
+    return (
+      <span role="status" className="flex items-center gap-1.5 text-[13px] font-bold text-muted-foreground">
+        <span aria-hidden className="size-2 rounded-full bg-muted-foreground" />
+        Finished
+      </span>
+    )
+  }
   return (
     <span role="status" className="flex items-center gap-1.5 text-[13px] font-bold">
       <span aria-hidden className={`size-2 rounded-full ${live ? "bg-live" : "animate-pulse bg-gold"}`} />
@@ -139,7 +160,15 @@ function LiveBadge({ status, lastMoveAgo }: { status: ConnectionStatus; lastMove
   )
 }
 
-function PhoneHeader({ eventLine, status }: { eventLine: string; status: ConnectionStatus }) {
+function PhoneHeader({
+  eventLine,
+  status,
+  finished = false,
+}: {
+  eventLine: string
+  status: ConnectionStatus
+  finished?: boolean
+}) {
   return (
     <header className="flex items-center gap-1 px-3 pt-2.5 pb-3.5 md:hidden">
       <Link to="/" aria-label="Back to live games" className="flex size-11 items-center justify-center text-foreground">
@@ -147,7 +176,7 @@ function PhoneHeader({ eventLine, status }: { eventLine: string; status: Connect
       </Link>
       <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{eventLine}</span>
       <span className="pr-2">
-        <LiveBadge status={status} />
+        <LiveBadge status={status} finished={finished} />
       </span>
     </header>
   )
