@@ -2,14 +2,16 @@ import { useEffect, useRef, type ReactNode } from "react"
 import { Link, useParams } from "react-router"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { AppShell } from "@/components/AppShell"
-import { ChessBoard } from "@/components/ChessBoard"
+import { ChessBoard, type BoardMark } from "@/components/ChessBoard"
 import { SideDot } from "@/components/MatchCard"
 import { paletteFor } from "@/lib/boardPalette"
+import { CLASSIFICATION_STYLE, classifyMove } from "@/lib/classify"
 import { runningClock, useNow } from "@/lib/clock"
 import { EvalBar } from "@/components/EvalBar"
 import { useMoveBrowser, type MoveBrowser } from "@/lib/browse"
 import { barPercent, evalAt, evalWords, formatEval, resultWords } from "@/lib/eval"
 import { changedSquares, START_FEN } from "@/lib/fen"
+import { destinationSquare } from "@/lib/moveAnimation"
 import { clocksOf, type GameState, type LiveMove, type MoveEval } from "@/lib/game"
 import { resultLine, splitTournamentName } from "@/lib/names"
 import { formatMove, moveNumber, sideToMove, type Side } from "@/lib/ply"
@@ -69,6 +71,11 @@ export function BoardView() {
   const viewedFen = viewed === state.lastPly ? state.fen : (fenAt(viewed) ?? state.fen)
   const prevFen = viewed > 0 ? fenAt(viewed - 1) : undefined
   const highlight = prevFen ? changedSquares(prevFen, viewedFen) : undefined
+  // The viewed move's Move classification, drawn on its squares (#70).
+  const classification = classifyMove(state.moves, viewed)
+  const markSquare = classification && prevFen ? destinationSquare(prevFen, viewedFen) : null
+  const mark: BoardMark | undefined =
+    classification && markSquare ? { square: markSquare, ...CLASSIFICATION_STYLE[classification] } : undefined
   const lastMoveAgo = state.lastMoveAt !== null && state.lastPly > 0 ? timeAgo(now - state.lastMoveAt) : null
   // A finished game: clocks stop, nobody is "to move", and the status
   // line shows the result instead.
@@ -123,7 +130,7 @@ export function BoardView() {
           <PhonePlayer side="black" name={black} clock={clocks.black} active={!finished && toMove === "black"} />
           {/* Desktop: never taller than the screen under the scoreboard. */}
           <div className="px-4 md:max-w-[min(640px,calc(100svh-20rem))] md:px-0">
-            <ChessBoard fen={viewedFen} highlight={highlight} palette={palette} />
+            <ChessBoard fen={viewedFen} highlight={highlight} mark={mark} palette={palette} />
             {/* Exactly the board's width, so level (the centre tick) sits
                 under the middle of the board. */}
             <EvalBar
@@ -383,26 +390,48 @@ function MoveList({
       {rows.map((row) => (
         <li key={row.n} className="grid grid-cols-[3.25rem_1fr_1fr] items-center px-2 odd:bg-white/[0.02]">
           <span className="pl-2 text-muted-foreground">{row.n}.</span>
-          <MoveCell move={row.white} current={row.white?.ply === viewedPly} onPick={pick} />
-          <MoveCell move={row.black} current={row.black?.ply === viewedPly} onPick={pick} />
+          <MoveCell moves={moves} move={row.white} current={row.white?.ply === viewedPly} onPick={pick} />
+          <MoveCell moves={moves} move={row.black} current={row.black?.ply === viewedPly} onPick={pick} />
         </li>
       ))}
     </ol>
   )
 }
 
-function MoveCell({ move, current, onPick }: { move?: LiveMove; current: boolean; onPick: (ply: number) => void }) {
+function MoveCell({
+  moves,
+  move,
+  current,
+  onPick,
+}: {
+  moves: GameState["moves"]
+  move?: LiveMove
+  current: boolean
+  onPick: (ply: number) => void
+}) {
   if (!move) return <span />
+  const classification = classifyMove(moves, move.ply)
+  const style = classification ? CLASSIFICATION_STYLE[classification] : null
   return (
     <button
       type="button"
       aria-current={current ? "step" : undefined}
+      aria-label={style ? `${move.san}, ${style.name.toLowerCase()}` : undefined}
       onClick={() => onPick(move.ply)}
-      className={`mx-0.5 my-1 w-fit rounded-md px-2.5 py-1 text-left ${
+      className={`mx-0.5 my-1 flex w-fit items-center gap-1.5 rounded-md px-2.5 py-1 text-left ${
         current ? "bg-primary font-bold text-primary-foreground" : "hover:bg-secondary"
       }`}
     >
       {move.san}
+      {style && (
+        <span
+          aria-hidden
+          className="flex size-[18px] items-center justify-center rounded-full font-sans text-[10px] leading-none font-extrabold text-white"
+          style={{ background: style.color }}
+        >
+          {style.glyph}
+        </span>
+      )}
     </button>
   )
 }

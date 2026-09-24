@@ -18,6 +18,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
   best featured pick among its tours.
 
 ### Added
+- Move classification on the board page (#70, spec #69): Inaccuracy,
+  Mistake, Blunder and Miss, from the Evals the client already has, with
+  Lichess's exact rules (5 / 10 / 15 point drops in the mover's winning
+  chances, plus its mate table). A Mistake or Blunder right after the
+  opponent's Mistake or Blunder is a Miss. The viewed move's squares are
+  tinted in the label's colour with a badge on the destination square,
+  and the move list shows the same icon. Research in
+  `docs/research/move-classification.md`.
 - Featured game picks the most exciting live game (#52). Every live game
   gets a hype score from player strength and titles (30%), recent eval
   swings (20%), the event's Lichess tier (15%), a close game late or a

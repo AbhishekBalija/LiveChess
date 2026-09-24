@@ -50,6 +50,17 @@ Version orders changes to the game itself, and a gap in it makes the client resy
 **Q: How do you turn a centipawn eval into a win-probability bar?**
 Centipawns are not a percentage: +1 pawn in a level middlegame and +1 pawn when already +8 mean very different things. The bar runs the eval through a logistic curve (the one Lichess uses: `50 + 50 * (2 / (1 + e^(-0.00368 * cp)) - 1)`, with cp clamped at plus or minus 1000), so small edges move the bar a little and big ones saturate near the ends. A forced mate or a tablebase win fills it completely, and a finished game shows its result instead.
 
+## Move classification
+
+**Q: How do you decide a move was a blunder?**
+Not by centipawns lost. Going from -8 to -12 in a lost position costs four pawns but changes nothing. Both evals go through the same winning-chances curve as the eval bar, from the mover's side, and the drop is what counts: 5, 10 and 15 points (out of 100) are inaccuracy, mistake and blunder. Those are Lichess's exact thresholds, read from its source, so the labels match what strong players already trust.
+
+**Q: Why are mates handled separately?**
+A mate score has no centipawn value to put on the curve. Lichess's small mate table covers it: allowing a forced mate is a blunder unless you were already clearly lost, losing your own forced mate depends on how much advantage is left, and finding a slower mate is never an error. A tablebase-proven win counts as keeping the mate.
+
+**Q: Why compute labels on the client instead of storing them?**
+They are a pure function of evals the client already has, so there is no migration, no backfill, and a Correction or a late eval relabels itself automatically. The one thing the client cannot work out, the engine's best move and whether a move was a sacrifice, the eval worker will store as plain facts.
+
 ## Featured game
 
 **Q: How do you pick "the most exciting game" without it jumping around?**

@@ -40,3 +40,17 @@ export function slidesBetween(before: string, after: string): Map<string, Slide>
   }
   return slides
 }
+
+// The square a move landed on, for the Move classification badge. When
+// castling, that is the king's square.
+export function destinationSquare(before: string, after: string): string | null {
+  const squares = [...slidesBetween(before, after).keys()]
+  if (squares.length <= 1) return squares[0] ?? null
+  const board = fenToBoard(after)
+  return (
+    squares.find((sq) => {
+      const piece = board[8 - Number(sq[1])]?.[FILES.indexOf(sq[0] ?? "")]
+      return piece?.toLowerCase() === "k"
+    }) ?? null
+  )
+}

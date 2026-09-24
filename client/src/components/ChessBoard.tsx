@@ -12,15 +12,26 @@ import { slidesBetween, type Slide } from "@/lib/moveAnimation"
 
 const FILES = "abcdefgh"
 
+// A Move classification drawn on the board: the highlighted squares take
+// its colour and a badge sits on the corner of the destination square.
+export interface BoardMark {
+  square: string
+  color: string
+  glyph: string
+  name: string
+}
+
 export function ChessBoard({
   fen,
   highlight,
+  mark,
   palette = BOARD_PALETTES[0],
   coords = true,
   className = "",
 }: {
   fen?: string
   highlight?: Set<string>
+  mark?: BoardMark
   palette?: BoardPalette
   // Thumbnails turn coordinates off; they are noise at that size.
   coords?: boolean
@@ -31,7 +42,7 @@ export function ChessBoard({
   return (
     <div
       role="img"
-      aria-label={fen ? "Chess board" : "Chess board loading"}
+      aria-label={fen ? (mark ? `Chess board, last move: ${mark.name}` : "Chess board") : "Chess board loading"}
       className={`@container grid aspect-square w-full grid-cols-8 grid-rows-8 overflow-hidden rounded-[3%] ${className}`}
     >
       {Array.from({ length: 64 }, (_, i) => {
@@ -41,9 +52,12 @@ export function ChessBoard({
         const light = (row + fileIndex) % 2 === 0
         const piece = board?.[row]?.[fileIndex] ?? null
         const lit = highlight?.has(square) ?? false
+        const base = light ? palette.light : palette.dark
         const background = lit
-          ? light ? palette.lightHighlight : palette.darkHighlight
-          : light ? palette.light : palette.dark
+          ? mark
+            ? `color-mix(in srgb, ${mark.color} 55%, ${base})`
+            : light ? palette.lightHighlight : palette.darkHighlight
+          : base
         // Coordinates take the opposite square color so they read on both.
         const coordColor = light ? palette.dark : palette.light
         return (
@@ -63,6 +77,15 @@ export function ChessBoard({
               </Coord>
             )}
             {piece && <Piece piece={piece} slide={slides.get(square)} />}
+            {mark?.square === square && (
+              <span
+                aria-hidden
+                className="absolute top-[0.4cqw] right-[0.4cqw] z-10 flex size-[5cqw] items-center justify-center rounded-full font-sans text-[2.6cqw] leading-none font-extrabold text-white shadow-md ring-[0.3cqw] ring-black/25"
+                style={{ background: mark.color }}
+              >
+                {mark.glyph}
+              </span>
+            )}
           </div>
         )
       })}
