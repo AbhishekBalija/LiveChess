@@ -10,3 +10,6 @@ build/
 
 # Local copy of the Lichess OpenAPI spec (reference only, 1.6 MB)
 docs/Lichess API*.json
+
+# Claude Code: personal, machine-specific settings stay local
+.claude/settings.local.json
