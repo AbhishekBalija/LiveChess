@@ -34,8 +34,21 @@ function flip(value: number | null): number | null {
   return -value;
 }
 
+// The engine's `bestmove` line: the best move in UCI ("e2e4", "e7e8q"),
+// or null when the side to move has none (checkmate or stalemate).
+export function parseBestMove(line: string): string | null {
+  const move = line.split(" ")[1];
+  return move && move !== "(none)" ? move : null;
+}
+
+// One search: the eval and the move Stockfish would play (UCI).
+export interface Search {
+  eval: Eval;
+  bestMove: string | null;
+}
+
 export interface EnginePort {
-  evaluate(fen: string, nodes: number): Promise<Eval>;
+  evaluate(fen: string, nodes: number): Promise<Search>;
 }
 
 // One long-lived Stockfish process, one search at a time.
@@ -70,15 +83,15 @@ export class Stockfish implements EnginePort {
 
   // Fixed node count, so the same position always gets the same eval
   // whatever the server load is (ADR 0006).
-  async evaluate(fen: string, nodes: number): Promise<Eval> {
+  async evaluate(fen: string, nodes: number): Promise<Search> {
     let last: Eval | null = null;
     this.send(`position fen ${fen}`);
     this.send(`go nodes ${nodes}`);
-    await this.until("bestmove", (line) => {
+    const bestLine = await this.until("bestmove", (line) => {
       last = parseScore(line) ?? last;
     });
     if (last === null) throw new Error(`stockfish gave no score for ${fen}`);
-    return whitePov(last, fen);
+    return { eval: whitePov(last, fen), bestMove: parseBestMove(bestLine) };
   }
 
   // Resolves with the exit code if the Stockfish process dies.

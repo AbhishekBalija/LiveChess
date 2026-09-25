@@ -100,3 +100,26 @@ describe("classifyMove: miss", () => {
     expect(labelOf([cp(0), cp(10), cp(-300)])).toBe("blunder")
   })
 })
+
+describe("classifyMove: best", () => {
+  // Ply 2 plays `san`; ply 1's position had `best` as the engine's reply.
+  function withBest(best: string | undefined, san: string, after: MoveEval = cp(0)) {
+    const moves = new Map<number, LiveMove>()
+    moves.set(1, { ply: 1, san: "e4", fen: "", clock: null, version: 1, eval: cp(0), bestReply: best })
+    moves.set(2, { ply: 2, san, fen: "", clock: null, version: 1, eval: after })
+    return classifyMove(moves, 2)
+  }
+
+  it("labels the engine's best reply as best", () => {
+    expect(withBest("e5", "e5")).toBe("best")
+    expect(withBest("e5", "c5")).toBeNull()
+  })
+
+  it("gives no best label without a stored best reply", () => {
+    expect(withBest(undefined, "e5")).toBeNull()
+  })
+
+  it("lets a bad label win if the engine's move still lost ground", () => {
+    expect(withBest("e5", "e5", cp(300))).toBe("blunder")
+  })
+})

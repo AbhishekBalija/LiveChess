@@ -20,6 +20,9 @@ export interface LiveMove {
   version: number
   // Set once the server's eval worker has analyzed the position.
   eval?: MoveEval
+  // The engine's best reply from this position (SAN), set with the eval
+  // when the worker stored one. The next move is Best when it matches.
+  bestReply?: string
 }
 
 export interface GameState {
@@ -49,6 +52,7 @@ export interface LiveEvent {
   result: string | null
   // Only on EvalUpdated events.
   eval: MoveEval | null
+  bestReply: string | null
 }
 
 // Parse one raw WebSocket message for this game. Null when the payload
@@ -76,6 +80,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     version,
     result: typeof r["result"] === "string" && r["result"] !== "" ? r["result"] : null,
     eval: parseEval(r["evalCp"], r["evalMate"]),
+    bestReply: typeof r["bestReply"] === "string" && r["bestReply"] !== "" ? r["bestReply"] : null,
   }
 }
 
@@ -92,7 +97,9 @@ function parseEval(rawCp: unknown, rawMate: unknown): MoveEval | null {
 function withEvals(moves: Map<number, LiveMove>, evals: EvalRow[] = []): Map<number, LiveMove> {
   for (const e of evals) {
     const move = moves.get(e.ply)
-    if (move && move.version === e.version) moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate } })
+    if (move && move.version === e.version) {
+      moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate }, bestReply: e.best ?? undefined })
+    }
   }
   return moves
 }
@@ -165,7 +172,7 @@ export function applyEvent(state: GameState, ev: LiveEvent, now = Date.now()): E
     const move = state.moves.get(ev.ply)
     if (!move || move.version !== ev.version || !ev.eval) return { state }
     const moves = new Map(state.moves)
-    moves.set(ev.ply, { ...move, eval: ev.eval })
+    moves.set(ev.ply, { ...move, eval: ev.eval, bestReply: ev.bestReply ?? undefined })
     return { state: { ...state, moves } }
   }
   if (ev.version <= state.version) return { state }

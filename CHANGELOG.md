@@ -18,6 +18,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
   best featured pick among its tours.
 
 ### Added
+- Best move label (#71): a green ★ when the played move is the engine's
+  best reply from the position before it. The eval worker stores that
+  reply as SAN (Stockfish's `bestmove`, or the tablebase's first move) in
+  a new nullable `moves.best_reply` column (migration 0009, no backfill)
+  and sends it with `EvalUpdated` and the state/resync endpoint. Bad
+  labels still win over Best.
 - Move classification on the board page (#70, spec #69): Inaccuracy,
   Mistake, Blunder and Miss, from the Evals the client already has, with
   Lichess's exact rules (5 / 10 / 15 point drops in the mover's winning

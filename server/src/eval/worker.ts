@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { validateFen } from "chess.js";
+import { Chess, validateFen } from "chess.js";
 import type { Db } from "../db/client";
 import { games, moves, outboxEvents } from "../db/schema";
 import type { HttpPort } from "../ingestion/worker";
@@ -54,6 +54,19 @@ export type EvalSource = "stockfish" | "tablebase" | "invalid";
 export interface EvalResult {
   eval: Eval;
   source: EvalSource;
+  // Best reply from this position, as SAN (Move classification: Best).
+  best: string | null;
+}
+
+// Stockfish's UCI move ("e7e8q") as SAN ("e8=Q+"), from the position it
+// was searched in. Null when it is not a legal move there.
+export function uciToSan(fen: string, uci: string): string | null {
+  try {
+    const move = new Chess(fen).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    return move.san;
+  } catch {
+    return null;
+  }
 }
 
 // Picks the source for one position: the tablebase for 7 pieces or fewer
@@ -70,17 +83,19 @@ export class Evaluator {
 
   async evaluate(fen: string): Promise<EvalResult> {
     // Stockfish can crash on a malformed FEN, so never hand it one.
-    if (!validateFen(fen).ok) return { eval: { cp: null, mate: null }, source: "invalid" };
+    if (!validateFen(fen).ok) return { eval: { cp: null, mate: null }, source: "invalid", best: null };
     if (this.now() >= this.tablebasePausedUntil) {
       try {
         const exact = await tablebaseEval(this.http, fen);
-        if (exact) return { eval: exact, source: "tablebase" };
+        if (exact) return { eval: exact.eval, source: "tablebase", best: exact.bestSan };
       } catch (err) {
         if (err instanceof TablebaseRateLimited) this.tablebasePausedUntil = this.now() + 60_000;
         else console.warn("tablebase lookup failed, using stockfish", err);
       }
     }
-    return { eval: await this.engine.evaluate(fen, this.nodes), source: "stockfish" };
+    const search = await this.engine.evaluate(fen, this.nodes);
+    const best = search.bestMove === null ? null : uciToSan(fen, search.bestMove);
+    return { eval: search.eval, source: "stockfish", best };
   }
 }
 
@@ -92,7 +107,7 @@ export async function saveEval(database: Db, job: EvalJob, result: EvalResult): 
   return database.transaction(async (tx) => {
     const updated = await tx
       .update(moves)
-      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source })
+      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source, bestReply: result.best })
       .where(and(eq(moves.id, job.moveId), eq(moves.superseded, false)))
       .returning({ id: moves.id });
     if (updated.length === 0 || result.source === "invalid") return false;
@@ -104,6 +119,7 @@ export async function saveEval(database: Db, job: EvalJob, result: EvalResult): 
         version: job.version,
         evalCp: result.eval.cp,
         evalMate: result.eval.mate,
+        bestReply: result.best,
         latest: job.latest,
       },
     });

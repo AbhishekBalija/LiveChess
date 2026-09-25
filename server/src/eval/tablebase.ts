@@ -30,14 +30,24 @@ export function categoryToEval(category: string, fen: string): Eval | null {
 
 export class TablebaseRateLimited extends Error {}
 
+export interface TablebaseAnswer {
+  eval: Eval;
+  // The first of the tablebase's moves, which it lists best first (SAN).
+  // Null when the side to move has no moves.
+  bestSan: string | null;
+}
+
 // Null when the tablebase has no exact answer; the caller falls back to
 // Stockfish. A 429 is thrown so the caller can pause lookups for a minute
 // (the Lichess API asks for one request at a time and a minute's wait).
-export async function tablebaseEval(http: HttpPort, fen: string): Promise<Eval | null> {
+export async function tablebaseEval(http: HttpPort, fen: string): Promise<TablebaseAnswer | null> {
   if (pieceCount(fen) > MAX_PIECES) return null;
   const res = await http.get(`${TABLEBASE_URL}?fen=${encodeURIComponent(fen)}`);
   if (res.status === 429) throw new TablebaseRateLimited("tablebase rate limit");
   if (!res.ok) return null;
-  const body = (await res.json()) as { category?: unknown };
-  return typeof body.category === "string" ? categoryToEval(body.category, fen) : null;
+  const body = (await res.json()) as { category?: unknown; moves?: Array<{ san?: unknown }> };
+  const exact = typeof body.category === "string" ? categoryToEval(body.category, fen) : null;
+  if (!exact) return null;
+  const san = body.moves?.[0]?.san;
+  return { eval: exact, bestSan: typeof san === "string" ? san : null };
 }

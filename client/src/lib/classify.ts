@@ -4,12 +4,14 @@ import type { LiveMove, MoveEval } from "./game"
 // from the Evals before and after it. The rules are Lichess's, exactly
 // (docs/research/move-classification.md): the mover's winning chances
 // dropping 5, 10 or 15 points on a 0-100 scale, plus its mate table.
+// Best is the engine's own choice from the position before the move.
 
-export type Classification = "miss" | "inaccuracy" | "mistake" | "blunder"
+export type Classification = "best" | "miss" | "inaccuracy" | "mistake" | "blunder"
 
 // How each label looks: its name, the badge glyph, and its colour token
 // (index.css).
 export const CLASSIFICATION_STYLE: Record<Classification, { name: string; glyph: string; color: string }> = {
+  best: { name: "Best", glyph: "★", color: "var(--cls-best)" },
   miss: { name: "Miss", glyph: "×", color: "var(--cls-miss)" },
   inaccuracy: { name: "Inaccuracy", glyph: "?!", color: "var(--cls-inaccuracy)" },
   mistake: { name: "Mistake", glyph: "?", color: "var(--cls-mistake)" },
@@ -84,5 +86,9 @@ export function classifyMove(moves: Map<number, LiveMove>, ply: number): Classif
   const label = labelAt(moves, ply)
   // Failing to punish the opponent's mistake or blunder is a Miss.
   if (isError(label) && isError(labelAt(moves, ply - 1))) return "miss"
-  return label
+  // A bad label wins over Best. That should not happen (the engine's own
+  // move losing ground), but the order keeps it defined.
+  if (label) return label
+  const best = moves.get(ply - 1)?.bestReply
+  return best !== undefined && best === moves.get(ply)?.san ? "best" : null
 }

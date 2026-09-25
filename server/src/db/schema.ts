@@ -95,6 +95,10 @@ export const moves = pgTable(
     evalCp: integer("eval_cp"),
     evalMate: integer("eval_mate"),
     evalSource: text("eval_source"),
+    // Best reply from the position after this move, as SAN (Stockfish's
+    // bestmove or the tablebase's first move). The next Move is labelled
+    // Best when it matches. Null for plies evaluated before it existed.
+    bestReply: text("best_reply"),
   },
   // One live row per identity key. Superseded history rows are exempt,
   // otherwise a correction could never coexist with the row it replaces.

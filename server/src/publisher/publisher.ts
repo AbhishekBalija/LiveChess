@@ -26,6 +26,8 @@ export interface StreamFields extends Record<string, string> {
   // Eval from White's side, only on EvalUpdated events; empty otherwise.
   evalCp: string;
   evalMate: string;
+  // Best reply (SAN) from this position, only on EvalUpdated events.
+  bestReply: string;
 }
 
 export interface CacheFields extends Record<string, string> {
@@ -41,6 +43,7 @@ export interface EvalCacheFields extends Record<string, string> {
   evalVersion: string;
   evalCp: string;
   evalMate: string;
+  evalBest: string;
 }
 
 // Board-position snapshot attached to every outbox payload by the
@@ -73,13 +76,14 @@ export function buildWrites(row: {
     result: str(row.payload["result"]),
     evalCp: str(row.payload["evalCp"]),
     evalMate: str(row.payload["evalMate"]),
+    bestReply: str(row.payload["bestReply"]),
   };
   // An eval never moves the board, so it must not touch the checkpoint
   // fields. Only the newest ply's eval is cached, for the resync fast path.
   if (row.eventType === "EvalUpdated") {
     const cache: EvalCacheFields | null =
       row.payload["latest"] === true
-        ? { evalPly: stream.ply, evalVersion: stream.version, evalCp: stream.evalCp, evalMate: stream.evalMate }
+        ? { evalPly: stream.ply, evalVersion: stream.version, evalCp: stream.evalCp, evalMate: stream.evalMate, evalBest: stream.bestReply }
         : null;
     return { stream, cacheKey: cacheKey(gameId), cache };
   }
