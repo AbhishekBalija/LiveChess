@@ -1,16 +1,19 @@
+import { whiteWinPercent } from "./eval"
 import type { LiveMove, MoveEval } from "./game"
 
 // Move classification (CONTEXT.md, spec #69): how good a Move was, judged
 // from the Evals before and after it. The rules are Lichess's, exactly
 // (docs/research/move-classification.md): the mover's winning chances
 // dropping 5, 10 or 15 points on a 0-100 scale, plus its mate table.
-// Best is the engine's own choice from the position before the move.
+// Best is the engine's own choice from the position before the move, and
+// Brilliant is a Best move that sacrifices material.
 
-export type Classification = "best" | "miss" | "inaccuracy" | "mistake" | "blunder"
+export type Classification = "brilliant" | "best" | "miss" | "inaccuracy" | "mistake" | "blunder"
 
 // How each label looks: its name, the badge glyph, and its colour token
 // (index.css).
 export const CLASSIFICATION_STYLE: Record<Classification, { name: string; glyph: string; color: string }> = {
+  brilliant: { name: "Brilliant", glyph: "!!", color: "var(--cls-brilliant)" },
   best: { name: "Best", glyph: "★", color: "var(--cls-best)" },
   miss: { name: "Miss", glyph: "×", color: "var(--cls-miss)" },
   inaccuracy: { name: "Inaccuracy", glyph: "?!", color: "var(--cls-inaccuracy)" },
@@ -78,6 +81,24 @@ function labelAt(moves: Map<number, LiveMove>, ply: number): Classification | nu
   return baseLabel(before, after, ply % 2 === 1 ? 1 : -1)
 }
 
+// A Best move is Brilliant when it gives up material (checked on the
+// server), leaves the mover at 50% or better, and was played from under
+// 90%: a sacrifice when already completely winning is not special.
+function isBrilliant(moves: Map<number, LiveMove>, ply: number): boolean {
+  const move = moves.get(ply)
+  const before = moves.get(ply - 1)?.eval
+  if (!move?.sacrifice || !move.eval || !before) return false
+  const white = ply % 2 === 1
+  const moverPercent = (e: MoveEval, sideToMove: "white" | "black") => {
+    const percent = whiteWinPercent(e, sideToMove)
+    return white ? percent : 100 - percent
+  }
+  // Before the move the mover is to move; after it, the opponent is.
+  const mover = white ? "white" : "black"
+  const opponent = white ? "black" : "white"
+  return moverPercent(before, mover) < 90 && moverPercent(move.eval, opponent) >= 50
+}
+
 const isError = (label: Classification | null) => label === "mistake" || label === "blunder"
 
 // The Move classification of the move at `ply`, or null when it gets no
@@ -90,5 +111,6 @@ export function classifyMove(moves: Map<number, LiveMove>, ply: number): Classif
   // move losing ground), but the order keeps it defined.
   if (label) return label
   const best = moves.get(ply - 1)?.bestReply
-  return best !== undefined && best === moves.get(ply)?.san ? "best" : null
+  if (best === undefined || best !== moves.get(ply)?.san) return null
+  return isBrilliant(moves, ply) ? "brilliant" : "best"
 }

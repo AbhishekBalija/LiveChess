@@ -123,3 +123,44 @@ describe("classifyMove: best", () => {
     expect(withBest("e5", "e5", cp(300))).toBe("blunder")
   })
 })
+
+describe("classifyMove: brilliant", () => {
+  // White plays the engine's best move at ply 3, from `before` to `after`
+  // (White-side evals), with the server's sacrifice flag.
+  function brilliantCase(sacrifice: boolean | undefined, before: MoveEval, after: MoveEval) {
+    const moves = new Map<number, LiveMove>()
+    moves.set(1, { ply: 1, san: "e4", fen: "", clock: null, version: 1, eval: cp(0) })
+    moves.set(2, { ply: 2, san: "e5", fen: "", clock: null, version: 1, eval: before, bestReply: "Bxh7+" })
+    moves.set(3, { ply: 3, san: "Bxh7+", fen: "", clock: null, version: 1, eval: after, sacrifice })
+    return classifyMove(moves, 3)
+  }
+
+  it("a best move that sacrifices material is brilliant", () => {
+    expect(brilliantCase(true, cp(50), cp(60))).toBe("brilliant")
+    expect(brilliantCase(false, cp(50), cp(60))).toBe("best")
+    expect(brilliantCase(undefined, cp(50), cp(60))).toBe("best")
+  })
+
+  it("not when the mover is worse than 50% after it", () => {
+    expect(brilliantCase(true, cp(-150), cp(-100))).toBe("best")
+    expect(brilliantCase(true, cp(-150), cp(0))).toBe("brilliant")
+  })
+
+  it("not when the mover was already at 90% or more", () => {
+    // +6 pawns is about 90% on the curve.
+    expect(brilliantCase(true, cp(700), cp(700))).toBe("best")
+    expect(brilliantCase(true, cp(500), cp(500))).toBe("brilliant")
+    expect(brilliantCase(true, mate(4), mate(3))).toBe("best")
+  })
+
+  it("mirrors the guards for Black", () => {
+    const moves = new Map<number, LiveMove>()
+    moves.set(1, { ply: 1, san: "e4", fen: "", clock: null, version: 1, eval: cp(0), bestReply: "Bxh2+" })
+    moves.set(2, { ply: 2, san: "Bxh2+", fen: "", clock: null, version: 1, eval: cp(-40), sacrifice: true })
+    expect(classifyMove(moves, 2)).toBe("brilliant")
+    moves.set(2, { ply: 2, san: "Bxh2+", fen: "", clock: null, version: 1, eval: cp(150), sacrifice: true })
+    // Worse than 50% for Black after it is not brilliant, and the drop
+    // from 0 to +1.5 is a mistake anyway, which wins over any good label.
+    expect(classifyMove(moves, 2)).toBe("mistake")
+  })
+})

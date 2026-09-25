@@ -99,6 +99,9 @@ export const moves = pgTable(
     // bestmove or the tablebase's first move). The next Move is labelled
     // Best when it matches. Null for plies evaluated before it existed.
     bestReply: text("best_reply"),
+    // Whether this move gave up material net (the Brilliant label's
+    // sacrifice check). Null for ply 1 and plies evaluated before it existed.
+    sacrifice: boolean("sacrifice"),
   },
   // One live row per identity key. Superseded history rows are exempt,
   // otherwise a correction could never coexist with the row it replaces.

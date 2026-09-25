@@ -492,6 +492,18 @@ Takeaways, with that caveat:
    Blunder, the mover was then winning, and after this move is not.
 5. Great and the second-line data as a separate decision.
 
+### Sacrifice threshold (decided for #72)
+
+Chess.com's own article
+([How to play a brilliant move](https://www.chess.com/article/view/how-to-play-a-brilliant-move),
+NM Jeremy Kane, updated 2024-02-07): "A brilliant move is usually a strong
+sacrifice of a piece or an exchange (a rook for a knight or bishop)."
+WintrChess ignores pawns and counts a piece left where a cheaper piece can
+take it, so its smallest sacrifice is a minor for a pawn. En Croissant
+counts a drop of more than 100 (pawn 90). LiveChess counts a net loss of
+**200 or more**: minor for a pawn and the exchange count, a pawn alone
+does not. No Chess.com staff source on pawn sacrifices was found.
+
 ## Open questions for the owner
 
 1. **Which label set for the first version?** Lichess-style three bad labels

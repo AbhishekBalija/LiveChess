@@ -8,6 +8,8 @@ import { games, moves, outboxEvents, tournaments } from "../db/schema";
 import { applyMoveReceived, emptyGame } from "../ingestion/handler";
 import type { HttpPort, HttpResponse } from "../ingestion/worker";
 import { parseBestMove, parseScore, whitePov, type EnginePort } from "./engine";
+import { Chess } from "chess.js";
+import { isSacrifice, sacrificedMaterial } from "./sacrifice";
 import { categoryToEval, pieceCount, TABLEBASE_WIN_CP } from "./tablebase";
 import { Evaluator, nextJob, saveEval, uciToSan } from "./worker";
 
@@ -54,6 +56,38 @@ describe("UCI to SAN", () => {
     ["garbage", WHITE_TO_MOVE, "zz", null],
   ])("%s", (_name, fen, uci, san) => {
     expect(uciToSan(fen, uci)).toBe(san);
+  });
+});
+
+describe("sacrifice check", () => {
+  // Material the mover gives up net when playing `san` from `fen`.
+  function lostBy(fen: string, san: string): number | null {
+    const board = new Chess(fen);
+    board.move(san);
+    return sacrificedMaterial(fen, board.fen());
+  }
+
+  it.each([
+    // Bishop for a pawn: Kxh7 wins the bishop back for nothing.
+    ["Greek gift", "r1bq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 8", "Bxh7+", 200],
+    // Qd8 takes the knight on g5 for free.
+    ["hanging piece", "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3", "Ng5", 300],
+    ["even trade", "rnbqkbnr/ppp2ppp/8/3pp3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3", "exd5", 0],
+    // Taking back the knight that just took a pawn gains material.
+    ["recapture", "rnbqkb1r/pppp1ppp/8/4p3/4n3/2N5/PPPP1PPP/R1BQKBNR w KQkq - 0 3", "Nxe4", -300],
+    // The new queen is taken, but that only costs the pawn.
+    ["promotion", "r6k/4P3/8/8/8/8/8/4K3 w - - 0 1", "e8=Q+", 100],
+  ])("%s", (_name, fen, san, lost) => {
+    expect(lostBy(fen, san)).toBe(lost);
+  });
+
+  it("counts more than a pawn as a sacrifice, and needs usable FENs", () => {
+    const fen = "r1bq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 8";
+    const board = new Chess(fen);
+    board.move("Bxh7+");
+    expect(isSacrifice(fen, board.fen())).toBe(true);
+    expect(isSacrifice(WHITE_TO_MOVE, BLACK_TO_MOVE)).toBe(false);
+    expect(isSacrifice("not a fen", BLACK_TO_MOVE)).toBeNull();
   });
 });
 
@@ -159,19 +193,25 @@ describe.runIf(URL)("eval worker integration", () => {
     }
 
     const newest = await nextJob(database);
-    expect(newest).toMatchObject({ gameId: g.id, ply: 2, version: 2, latest: true });
+    // The job carries the FEN before the move, for the sacrifice check.
+    expect(newest).toMatchObject({ gameId: g.id, ply: 2, version: 2, latest: true, prevFen: BLACK_TO_MOVE });
     if (!newest) throw new Error("no job");
-    await expect(saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish", best: "Nf3" })).resolves.toBe(true);
+    await expect(
+      saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish", best: "Nf3" }, false),
+    ).resolves.toBe(true);
     const [event] = await database.select().from(outboxEvents).orderBy(desc(outboxEvents.id)).limit(1);
     expect(event).toMatchObject({
       eventType: "EvalUpdated",
-      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, bestReply: "Nf3", latest: true },
+      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, bestReply: "Nf3", sacrifice: false, latest: true },
     });
-    const [stored] = await database.select({ best: moves.bestReply }).from(moves).where(eq(moves.id, newest.moveId));
-    expect(stored?.best).toBe("Nf3");
+    const [stored] = await database
+      .select({ best: moves.bestReply, sacrifice: moves.sacrifice })
+      .from(moves)
+      .where(eq(moves.id, newest.moveId));
+    expect(stored).toEqual({ best: "Nf3", sacrifice: false });
 
     const backfill = await nextJob(database);
-    expect(backfill).toMatchObject({ gameId: g.id, ply: 1, latest: false });
+    expect(backfill).toMatchObject({ gameId: g.id, ply: 1, latest: false, prevFen: null });
     if (!backfill) throw new Error("no job");
     // A Correction supersedes the row while the search runs.
     await database.update(moves).set({ superseded: true }).where(eq(moves.id, backfill.moveId));
