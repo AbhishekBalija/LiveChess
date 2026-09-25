@@ -38,6 +38,16 @@ live ply, with no paid service involved. The research, with sources, is in
   itself (moves, Corrections, Truncations, Results). An eval result is
   published through the outbox as its own event naming the ply and the
   move row's Version, and resync returns the stored eval with each move.
+- **A second search for the Great label** (added for #73). Great needs
+  the score of the best move other than the engine's choice. After the
+  normal search, the worker searches again at the same node count,
+  limited to every other legal move (`go nodes N searchmoves ...`), and
+  stores that score next to the eval. It only does this when the move
+  played next was the engine's choice, or is not played yet (a game's
+  newest position), because no other move can be Great. Tablebase
+  positions need no search: the second move in its list is exact. The
+  normal search is unchanged, so every stored eval and best move stays
+  comparable with the ones before it.
 - **No job queue library.** The worker finds its work by querying
   Postgres for live moves that have no eval yet, the same polling shape as
   the outbox publisher, so it keeps no state of its own and a restart
@@ -61,6 +71,15 @@ live ply, with no paid service involved. The research, with sources, is in
 - **Stockfish in the browser (rejected):** nothing is stored for the
   classifier, battery and CPU cost land on phones, and a multi-board grid
   would run many engines on one device.
+- **MultiPV 2 for every search (rejected for Great):** it costs no extra
+  time at a fixed node count, but the nodes are split between two lines,
+  so the main eval gets shallower and even its best move can change. The
+  evals already stored would no longer match new ones, and the Best label
+  would shift with them.
+- **A separate, low-priority pass for Great (rejected):** it would search
+  only the plies that need it and never delay the live eval, but it needs
+  a second kind of job in the queue and a second event per candidate, and
+  Great labels would show up later than the other labels.
 - **BullMQ (rejected for eval):** the original architecture sketch named
   it, but it is a new dependency with no clear Bun story, and "which
   moves lack an eval" is already a simple Postgres query.
@@ -74,3 +93,9 @@ to over UCI keeps the Apache-2.0 code separate from it; the binary is
 installed on the machine and is not bundled into this repository.
 Capacity depends on the VM's CPU, so on a busy day the backfill falls
 behind first while the live bar stays current.
+The Great label's second search costs extra engine time. In a sample of
+2,761 real broadcast moves, 55% were the engine's choice, so older plies
+need about 55% more search time. A game's newest position always gets the
+second search, so its live eval lands one search later (about 0.4-0.7s
+at 300k nodes on a laptop core). If the VM cannot keep up, lower
+`EVAL_NODES` or add `EVAL_THREADS` before changing this design.

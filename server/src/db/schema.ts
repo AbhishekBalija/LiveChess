@@ -99,6 +99,11 @@ export const moves = pgTable(
     // bestmove or the tablebase's first move). The next Move is labelled
     // Best when it matches. Null for plies evaluated before it existed.
     bestReply: text("best_reply"),
+    // Score of the best move other than best_reply from this position,
+    // from White's side like eval_cp/eval_mate (the Great label). Null
+    // when it was not searched: the next move was not the best one.
+    secondCp: integer("second_cp"),
+    secondMate: integer("second_mate"),
     // Whether this move gave up material net (the Brilliant label's
     // sacrifice check). Null for ply 1 and plies evaluated before it existed.
     sacrifice: boolean("sacrifice"),

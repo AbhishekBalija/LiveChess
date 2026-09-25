@@ -30,6 +30,9 @@ export interface StreamFields extends Record<string, string> {
   bestReply: string;
   // "true" / "false" when the eval worker checked the move for a sacrifice.
   sacrifice: string;
+  // Score of the best other move from this position, when searched.
+  secondCp: string;
+  secondMate: string;
 }
 
 export interface CacheFields extends Record<string, string> {
@@ -47,6 +50,8 @@ export interface EvalCacheFields extends Record<string, string> {
   evalMate: string;
   evalBest: string;
   evalSacrifice: string;
+  evalSecondCp: string;
+  evalSecondMate: string;
 }
 
 // Board-position snapshot attached to every outbox payload by the
@@ -81,13 +86,24 @@ export function buildWrites(row: {
     evalMate: str(row.payload["evalMate"]),
     bestReply: str(row.payload["bestReply"]),
     sacrifice: str(row.payload["sacrifice"]),
+    secondCp: str(row.payload["secondCp"]),
+    secondMate: str(row.payload["secondMate"]),
   };
   // An eval never moves the board, so it must not touch the checkpoint
   // fields. Only the newest ply's eval is cached, for the resync fast path.
   if (row.eventType === "EvalUpdated") {
     const cache: EvalCacheFields | null =
       row.payload["latest"] === true
-        ? { evalPly: stream.ply, evalVersion: stream.version, evalCp: stream.evalCp, evalMate: stream.evalMate, evalBest: stream.bestReply, evalSacrifice: stream.sacrifice }
+        ? {
+            evalPly: stream.ply,
+            evalVersion: stream.version,
+            evalCp: stream.evalCp,
+            evalMate: stream.evalMate,
+            evalBest: stream.bestReply,
+            evalSacrifice: stream.sacrifice,
+            evalSecondCp: stream.secondCp,
+            evalSecondMate: stream.secondMate,
+          }
         : null;
     return { stream, cacheKey: cacheKey(gameId), cache };
   }

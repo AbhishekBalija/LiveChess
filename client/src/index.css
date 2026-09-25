@@ -38,6 +38,7 @@
 
   /* Move classification (spec #69), chess.com-style colours */
   --cls-brilliant: #26c2a3;
+  --cls-great: #5c8bb0;
   --cls-best: #81b64c;
   --cls-inaccuracy: #f7c631;
   --cls-mistake: #ffa459;

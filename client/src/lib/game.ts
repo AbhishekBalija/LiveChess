@@ -25,6 +25,9 @@ export interface LiveMove {
   bestReply?: string
   // Whether this move gave up material net (server sacrifice check).
   sacrifice?: boolean
+  // Score of the best move other than bestReply from this position, when
+  // the server searched it (the next move's Great label).
+  second?: MoveEval
 }
 
 export interface GameState {
@@ -56,6 +59,7 @@ export interface LiveEvent {
   eval: MoveEval | null
   bestReply: string | null
   sacrifice: boolean | null
+  second: MoveEval | null
 }
 
 // Parse one raw WebSocket message for this game. Null when the payload
@@ -85,6 +89,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     eval: parseEval(r["evalCp"], r["evalMate"]),
     bestReply: typeof r["bestReply"] === "string" && r["bestReply"] !== "" ? r["bestReply"] : null,
     sacrifice: r["sacrifice"] === "true" ? true : r["sacrifice"] === "false" ? false : null,
+    second: parseEval(r["secondCp"], r["secondMate"]),
   }
 }
 
@@ -105,6 +110,7 @@ function withEvals(moves: Map<number, LiveMove>, evals: EvalRow[] = []): Map<num
       moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate },
         bestReply: e.best ?? undefined,
         sacrifice: e.sacrifice ?? undefined,
+        second: e.secondCp === null && e.secondMate === null ? undefined : { cp: e.secondCp, mate: e.secondMate },
       })
     }
   }
@@ -182,6 +188,7 @@ export function applyEvent(state: GameState, ev: LiveEvent, now = Date.now()): E
     moves.set(ev.ply, { ...move, eval: ev.eval,
       bestReply: ev.bestReply ?? undefined,
       sacrifice: ev.sacrifice ?? undefined,
+      second: ev.second ?? undefined,
     })
     return { state: { ...state, moves } }
   }

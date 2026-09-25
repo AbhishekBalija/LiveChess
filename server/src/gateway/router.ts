@@ -16,6 +16,8 @@ export interface LiveEvent {
   evalMate: string;
   bestReply: string;
   sacrifice: string;
+  secondCp: string;
+  secondMate: string;
 }
 
 export interface Socket {

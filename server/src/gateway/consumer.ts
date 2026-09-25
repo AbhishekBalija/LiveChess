@@ -28,6 +28,8 @@ export function entryToEvent(fields: Record<string, string>): LiveEvent {
     evalMate: fields["evalMate"] ?? "",
     bestReply: fields["bestReply"] ?? "",
     sacrifice: fields["sacrifice"] ?? "",
+    secondCp: fields["secondCp"] ?? "",
+    secondMate: fields["secondMate"] ?? "",
   };
 }
 

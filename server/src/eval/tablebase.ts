@@ -35,6 +35,18 @@ export interface TablebaseAnswer {
   // The first of the tablebase's moves, which it lists best first (SAN).
   // Null when the side to move has no moves.
   bestSan: string | null;
+  // Exact result of the second move in that list (the Great label's
+  // "best other move"). Null when there is none or it is not exact.
+  second: Eval | null;
+}
+
+// Tablebase moves are scored for the side to move after them, so a
+// "loss" there is a win for the mover: turn it into the mover's eval.
+function afterMoveEval(category: unknown, fen: string): Eval | null {
+  if (typeof category !== "string") return null;
+  const opponent = categoryToEval(category, fen);
+  if (!opponent) return null;
+  return { cp: opponent.cp === 0 ? 0 : -(opponent.cp ?? 0), mate: null };
 }
 
 // Null when the tablebase has no exact answer; the caller falls back to
@@ -45,9 +57,13 @@ export async function tablebaseEval(http: HttpPort, fen: string): Promise<Tableb
   const res = await http.get(`${TABLEBASE_URL}?fen=${encodeURIComponent(fen)}`);
   if (res.status === 429) throw new TablebaseRateLimited("tablebase rate limit");
   if (!res.ok) return null;
-  const body = (await res.json()) as { category?: unknown; moves?: Array<{ san?: unknown }> };
+  const body = (await res.json()) as { category?: unknown; moves?: Array<{ san?: unknown; category?: unknown }> };
   const exact = typeof body.category === "string" ? categoryToEval(body.category, fen) : null;
   if (!exact) return null;
   const san = body.moves?.[0]?.san;
-  return { eval: exact, bestSan: typeof san === "string" ? san : null };
+  return {
+    eval: exact,
+    bestSan: typeof san === "string" ? san : null,
+    second: afterMoveEval(body.moves?.[1]?.category, fen),
+  };
 }

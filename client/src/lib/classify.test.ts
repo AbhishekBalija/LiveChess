@@ -164,3 +164,65 @@ describe("classifyMove: brilliant", () => {
     expect(classifyMove(moves, 2)).toBe("mistake")
   })
 })
+
+describe("classifyMove: great", () => {
+  // White plays the engine's best move at ply 3. `before` is the eval of
+  // the position before it, `second` the best of the other moves there.
+  function greatCase(
+    before: MoveEval,
+    second: MoveEval | undefined,
+    { sacrifice = false, after = before, prevSan = "e5", san = "Rd8" } = {},
+  ) {
+    const moves = new Map<number, LiveMove>()
+    moves.set(1, { ply: 1, san: "e4", fen: "", clock: null, version: 1, eval: cp(0) })
+    moves.set(2, { ply: 2, san: prevSan, fen: "", clock: null, version: 1, eval: before, bestReply: san, second })
+    moves.set(3, { ply: 3, san, fen: "", clock: null, version: 1, eval: after, sacrifice })
+    return classifyMove(moves, 3)
+  }
+
+  it("the only good move is great", () => {
+    // 0.00 vs -1.20: the other moves cost about 11 points.
+    expect(greatCase(cp(0), cp(-120))).toBe("great")
+    // 0.00 vs -1.00: about 9 points, just best.
+    expect(greatCase(cp(0), cp(-100))).toBe("best")
+  })
+
+  it("finding the only move out of a forced mate counts", () => {
+    expect(greatCase(cp(0), mate(-4))).toBe("great")
+  })
+
+  it("not when another move wins just as well", () => {
+    expect(greatCase(mate(3), mate(5))).toBe("best")
+    expect(greatCase(cp(20_000), cp(20_000))).toBe("best")
+  })
+
+  it("stays best without a searched second score", () => {
+    expect(greatCase(cp(0), undefined)).toBe("best")
+  })
+
+  it("brilliant wins over great", () => {
+    expect(greatCase(cp(0), cp(-300), { sacrifice: true })).toBe("brilliant")
+  })
+
+  it("taking material back right after the opponent took some is not great", () => {
+    expect(greatCase(cp(0), cp(-900), { prevSan: "Bxc3+", san: "bxc3" })).toBe("best")
+    // A capture after a quiet move can still be great.
+    expect(greatCase(cp(0), cp(-300), { san: "Bxh7+" })).toBe("great")
+  })
+
+  it("not when the mover is still worse after the only move", () => {
+    expect(greatCase(cp(-150), mate(-3), { after: cp(-150) })).toBe("best")
+    // Holding an equal position with the only move counts.
+    expect(greatCase(cp(0), cp(-300), { after: cp(0) })).toBe("great")
+  })
+
+  it("mirrors it for Black", () => {
+    const moves = new Map<number, LiveMove>()
+    moves.set(1, { ply: 1, san: "e4", fen: "", clock: null, version: 1, eval: cp(0), bestReply: "d5", second: cp(150) })
+    moves.set(2, { ply: 2, san: "d5", fen: "", clock: null, version: 1, eval: cp(0) })
+    expect(classifyMove(moves, 2)).toBe("great")
+    // Black worse than 50% after it: just best.
+    moves.set(2, { ply: 2, san: "d5", fen: "", clock: null, version: 1, eval: cp(40) })
+    expect(classifyMove(moves, 2)).toBe("best")
+  })
+})
