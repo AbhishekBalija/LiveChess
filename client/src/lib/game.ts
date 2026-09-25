@@ -23,6 +23,8 @@ export interface LiveMove {
   // The engine's best reply from this position (SAN), set with the eval
   // when the worker stored one. The next move is Best when it matches.
   bestReply?: string
+  // Whether this move gave up material net (server sacrifice check).
+  sacrifice?: boolean
 }
 
 export interface GameState {
@@ -53,6 +55,7 @@ export interface LiveEvent {
   // Only on EvalUpdated events.
   eval: MoveEval | null
   bestReply: string | null
+  sacrifice: boolean | null
 }
 
 // Parse one raw WebSocket message for this game. Null when the payload
@@ -81,6 +84,7 @@ export function parseLiveEvent(gameId: string, raw: unknown): LiveEvent | null {
     result: typeof r["result"] === "string" && r["result"] !== "" ? r["result"] : null,
     eval: parseEval(r["evalCp"], r["evalMate"]),
     bestReply: typeof r["bestReply"] === "string" && r["bestReply"] !== "" ? r["bestReply"] : null,
+    sacrifice: r["sacrifice"] === "true" ? true : r["sacrifice"] === "false" ? false : null,
   }
 }
 
@@ -98,7 +102,10 @@ function withEvals(moves: Map<number, LiveMove>, evals: EvalRow[] = []): Map<num
   for (const e of evals) {
     const move = moves.get(e.ply)
     if (move && move.version === e.version) {
-      moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate }, bestReply: e.best ?? undefined })
+      moves.set(e.ply, { ...move, eval: { cp: e.cp, mate: e.mate },
+        bestReply: e.best ?? undefined,
+        sacrifice: e.sacrifice ?? undefined,
+      })
     }
   }
   return moves
@@ -172,7 +179,10 @@ export function applyEvent(state: GameState, ev: LiveEvent, now = Date.now()): E
     const move = state.moves.get(ev.ply)
     if (!move || move.version !== ev.version || !ev.eval) return { state }
     const moves = new Map(state.moves)
-    moves.set(ev.ply, { ...move, eval: ev.eval, bestReply: ev.bestReply ?? undefined })
+    moves.set(ev.ply, { ...move, eval: ev.eval,
+      bestReply: ev.bestReply ?? undefined,
+      sacrifice: ev.sacrifice ?? undefined,
+    })
     return { state: { ...state, moves } }
   }
   if (ev.version <= state.version) return { state }

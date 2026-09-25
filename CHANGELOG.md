@@ -18,6 +18,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   best featured pick among its tours.
 
 ### Added
+- Brilliant move label (#72): a teal `!!` for a Best move that gives up
+  material, leaves the mover at 50%+ win chance and was played from under
+  90%. The eval worker checks each move for a sacrifice with a small
+  capture-only material search in chess.js (net loss of 200 or more, so a
+  minor piece for a pawn or the exchange counts, a pawn alone does not)
+  and stores it in a new nullable `moves.sacrifice` column (migration
+  0010, no backfill). It travels with `EvalUpdated` and state/resync.
 - Best move label (#71): a green ★ when the played move is the engine's
   best reply from the position before it. The eval worker stores that
   reply as SAN (Stockfish's `bestmove`, or the tablebase's first move) in

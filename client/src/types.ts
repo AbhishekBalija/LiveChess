@@ -23,6 +23,8 @@ export interface EvalRow {
   mate: number | null
   // Best reply from this position (SAN), for the next move's Best label.
   best: string | null
+  // Whether the move that reached this position gave up material net.
+  sacrifice: boolean | null
 }
 
 export interface GameStateResponse {

@@ -39,6 +39,8 @@ export interface EvalRow {
   mate: number | null;
   // Best reply from this position (SAN), for the next Move's Best label.
   best: string | null;
+  // Whether the move that reached this position gave up material net.
+  sacrifice: boolean | null;
 }
 
 // Narrow Postgres surface getGameState needs. Drizzle adapter below
@@ -149,7 +151,7 @@ export function drizzleStateDb(database: Db): StateDbPort {
     },
     async listEvals(gameId) {
       return database
-        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate, best: moves.bestReply })
+        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate, best: moves.bestReply, sacrifice: moves.sacrifice })
         .from(moves)
         .where(
           and(
@@ -165,13 +167,19 @@ export function drizzleStateDb(database: Db): StateDbPort {
   };
 }
 
+function parseFlag(raw: string | undefined): boolean | null {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return null;
+}
+
 // The newest ply's eval, from the fields the publisher caches.
 function parseCachedEval(hash: Record<string, string>): EvalRow[] {
   const ply = Number(hash["evalPly"]);
   const version = Number(hash["evalVersion"]);
   if (!hash["evalPly"] || !Number.isInteger(ply) || !Number.isInteger(version)) return [];
   const num = (raw: string | undefined): number | null => (raw ? Number(raw) : null);
-  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]), best: hash["evalBest"] || null }];
+  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]), best: hash["evalBest"] || null, sacrifice: parseFlag(hash["evalSacrifice"]) }];
 }
 
 function parseCacheSnapshot(

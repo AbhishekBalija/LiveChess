@@ -4,6 +4,7 @@ import type { Db } from "../db/client";
 import { games, moves, outboxEvents } from "../db/schema";
 import type { HttpPort } from "../ingestion/worker";
 import type { EnginePort, Eval } from "./engine";
+import { isSacrifice } from "./sacrifice";
 import { TablebaseRateLimited, tablebaseEval } from "./tablebase";
 
 // Eval worker core (ADR 0006). It keeps no state of its own: the to-do
@@ -15,6 +16,9 @@ export interface EvalJob {
   gameId: string;
   ply: number;
   fen: string;
+  // FEN before this move (the previous live ply's), for the sacrifice
+  // check. Null for ply 1 or when that row is missing.
+  prevFen: string | null;
   // The move row's Version, so clients can tell which move this eval is for.
   version: number;
   // The game's newest ply when the job was picked.
@@ -30,6 +34,10 @@ export interface EvalJob {
 // is thousands of rows, keep a "latest" pass separate if it grows past that.
 export async function nextJob(database: Db, watched: string[] = []): Promise<EvalJob | null> {
   const latest = sql<boolean>`${moves.ply} = ${games.lastPly}`;
+  const prevFen = sql<string | null>`(
+    select prev.fen from moves prev
+    where prev.game_id = ${moves.gameId} and prev.ply = ${moves.ply} - 1 and prev.superseded = false
+  )`;
   const order = [desc(latest), desc(games.updatedAt), desc(moves.ply)];
   if (watched.length > 0) order.unshift(desc(inArray(moves.gameId, watched)));
   const [row] = await database
@@ -38,6 +46,7 @@ export async function nextJob(database: Db, watched: string[] = []): Promise<Eva
       gameId: moves.gameId,
       ply: moves.ply,
       fen: moves.fen,
+      prevFen,
       version: moves.version,
       latest,
     })
@@ -99,15 +108,21 @@ export class Evaluator {
   }
 }
 
-// Stores the eval on its move row and publishes it, in one transaction.
+// Stores the eval (and whether the move was a sacrifice) on its move row
+// and publishes it, in one transaction.
 // If the row was superseded (Correction or Truncation) while we searched,
 // the update matches nothing and the result is dropped. Eval never bumps
 // the game's Version (ADR 0006).
-export async function saveEval(database: Db, job: EvalJob, result: EvalResult): Promise<boolean> {
+export async function saveEval(
+  database: Db,
+  job: EvalJob,
+  result: EvalResult,
+  sacrifice: boolean | null = null,
+): Promise<boolean> {
   return database.transaction(async (tx) => {
     const updated = await tx
       .update(moves)
-      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source, bestReply: result.best })
+      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source, bestReply: result.best, sacrifice })
       .where(and(eq(moves.id, job.moveId), eq(moves.superseded, false)))
       .returning({ id: moves.id });
     if (updated.length === 0 || result.source === "invalid") return false;
@@ -120,6 +135,7 @@ export async function saveEval(database: Db, job: EvalJob, result: EvalResult): 
         evalCp: result.eval.cp,
         evalMate: result.eval.mate,
         bestReply: result.best,
+        sacrifice,
         latest: job.latest,
       },
     });
@@ -132,6 +148,7 @@ export async function saveEval(database: Db, job: EvalJob, result: EvalResult): 
 export async function evalOnce(database: Db, evaluator: Evaluator, watched: string[] = []): Promise<boolean> {
   const job = await nextJob(database, watched);
   if (!job) return false;
-  await saveEval(database, job, await evaluator.evaluate(job.fen));
+  const sacrifice = job.prevFen === null ? null : isSacrifice(job.prevFen, job.fen);
+  await saveEval(database, job, await evaluator.evaluate(job.fen), sacrifice);
   return true;
 }
