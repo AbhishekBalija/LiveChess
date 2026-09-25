@@ -7,9 +7,9 @@ import * as schema from "../db/schema";
 import { games, moves, outboxEvents, tournaments } from "../db/schema";
 import { applyMoveReceived, emptyGame } from "../ingestion/handler";
 import type { HttpPort, HttpResponse } from "../ingestion/worker";
-import { parseScore, whitePov, type EnginePort } from "./engine";
+import { parseBestMove, parseScore, whitePov, type EnginePort } from "./engine";
 import { categoryToEval, pieceCount, TABLEBASE_WIN_CP } from "./tablebase";
-import { Evaluator, nextJob, saveEval } from "./worker";
+import { Evaluator, nextJob, saveEval, uciToSan } from "./worker";
 
 const WHITE_TO_MOVE = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
 const BLACK_TO_MOVE = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
@@ -34,6 +34,26 @@ describe("UCI score parsing", () => {
     expect(whitePov({ cp: null, mate: 2 }, BLACK_TO_MOVE)).toEqual({ cp: null, mate: -2 });
     // Mate 0 means the side to move is checkmated; there is no sign to flip.
     expect(whitePov({ cp: null, mate: 0 }, BLACK_TO_MOVE)).toEqual({ cp: null, mate: 0 });
+  });
+
+  it("reads the best move, and none when there is no legal move", () => {
+    expect(parseBestMove("bestmove e2e4 ponder e7e5")).toBe("e2e4");
+    expect(parseBestMove("bestmove e7e8q")).toBe("e7e8q");
+    expect(parseBestMove("bestmove (none)")).toBeNull();
+  });
+});
+
+describe("UCI to SAN", () => {
+  it.each([
+    ["plain move", WHITE_TO_MOVE, "g1f3", "Nf3"],
+    ["black move", BLACK_TO_MOVE, "e7e5", "e5"],
+    ["castling", "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", "e1g1", "O-O"],
+    ["promotion", "8/4P1k1/8/8/8/8/8/4K3 w - - 0 1", "e7e8q", "e8=Q"],
+    ["mate", "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", "a1a8", "Ra8#"],
+    ["illegal move", WHITE_TO_MOVE, "e1e5", null],
+    ["garbage", WHITE_TO_MOVE, "zz", null],
+  ])("%s", (_name, fen, uci, san) => {
+    expect(uciToSan(fen, uci)).toBe(san);
   });
 });
 
@@ -68,7 +88,7 @@ describe("Evaluator source choice", () => {
     const engine: EnginePort = {
       evaluate: async () => {
         calls.engine += 1;
-        return { cp: 12, mate: null };
+        return { eval: { cp: 12, mate: null }, bestMove: "g1f3" };
       },
     };
     const http: HttpPort = {
@@ -83,12 +103,14 @@ describe("Evaluator source choice", () => {
   }
 
   it("uses the tablebase for 7 pieces or fewer and Stockfish otherwise", async () => {
-    const { evaluator, calls } = setup(() => reply(200, { category: "win" }));
+    const { evaluator, calls } = setup(() => reply(200, { category: "win", moves: [{ uci: "h7h8q", san: "h8=Q+" }] }));
     await expect(evaluator.evaluate(ENDGAME)).resolves.toEqual({
       eval: { cp: TABLEBASE_WIN_CP, mate: null },
       source: "tablebase",
+      best: "h8=Q+",
     });
-    await expect(evaluator.evaluate(WHITE_TO_MOVE)).resolves.toMatchObject({ source: "stockfish" });
+    // Stockfish's UCI best move comes back as SAN.
+    await expect(evaluator.evaluate(WHITE_TO_MOVE)).resolves.toMatchObject({ source: "stockfish", best: "Nf3" });
     expect(calls).toEqual({ engine: 1, http: 1 });
   });
 
@@ -139,19 +161,21 @@ describe.runIf(URL)("eval worker integration", () => {
     const newest = await nextJob(database);
     expect(newest).toMatchObject({ gameId: g.id, ply: 2, version: 2, latest: true });
     if (!newest) throw new Error("no job");
-    await expect(saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish" })).resolves.toBe(true);
+    await expect(saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish", best: "Nf3" })).resolves.toBe(true);
     const [event] = await database.select().from(outboxEvents).orderBy(desc(outboxEvents.id)).limit(1);
     expect(event).toMatchObject({
       eventType: "EvalUpdated",
-      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, latest: true },
+      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, bestReply: "Nf3", latest: true },
     });
+    const [stored] = await database.select({ best: moves.bestReply }).from(moves).where(eq(moves.id, newest.moveId));
+    expect(stored?.best).toBe("Nf3");
 
     const backfill = await nextJob(database);
     expect(backfill).toMatchObject({ gameId: g.id, ply: 1, latest: false });
     if (!backfill) throw new Error("no job");
     // A Correction supersedes the row while the search runs.
     await database.update(moves).set({ superseded: true }).where(eq(moves.id, backfill.moveId));
-    await expect(saveEval(database, backfill, { eval: { cp: 30, mate: null }, source: "stockfish" })).resolves.toBe(false);
+    await expect(saveEval(database, backfill, { eval: { cp: 30, mate: null }, source: "stockfish", best: null })).resolves.toBe(false);
     const [row] = await database
       .select({ evalSource: moves.evalSource })
       .from(moves)
@@ -192,7 +216,7 @@ describe.runIf(URL)("eval worker integration", () => {
     const first = await nextJob(database, [watchedGame]);
     expect(first).toMatchObject({ gameId: watchedGame, ply: 2 });
     if (!first) throw new Error("no job");
-    await saveEval(database, first, { eval: { cp: 10, mate: null }, source: "stockfish" });
+    await saveEval(database, first, { eval: { cp: 10, mate: null }, source: "stockfish", best: null });
     // The watched game's older ply still beats the other game's newest one.
     await expect(nextJob(database, [watchedGame])).resolves.toMatchObject({ gameId: watchedGame, ply: 1 });
     await sql.end();

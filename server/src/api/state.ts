@@ -37,6 +37,8 @@ export interface EvalRow {
   version: number;
   cp: number | null;
   mate: number | null;
+  // Best reply from this position (SAN), for the next Move's Best label.
+  best: string | null;
 }
 
 // Narrow Postgres surface getGameState needs. Drizzle adapter below
@@ -147,7 +149,7 @@ export function drizzleStateDb(database: Db): StateDbPort {
     },
     async listEvals(gameId) {
       return database
-        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate })
+        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate, best: moves.bestReply })
         .from(moves)
         .where(
           and(
@@ -169,7 +171,7 @@ function parseCachedEval(hash: Record<string, string>): EvalRow[] {
   const version = Number(hash["evalVersion"]);
   if (!hash["evalPly"] || !Number.isInteger(ply) || !Number.isInteger(version)) return [];
   const num = (raw: string | undefined): number | null => (raw ? Number(raw) : null);
-  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]) }];
+  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]), best: hash["evalBest"] || null }];
 }
 
 function parseCacheSnapshot(

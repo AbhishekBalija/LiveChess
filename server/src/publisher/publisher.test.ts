@@ -218,18 +218,19 @@ describe("buildWrites for a takeback", () => {
       result: "",
       evalCp: "",
       evalMate: "",
+      bestReply: "",
     });
     expect(writes.cache).toEqual({ fen: "fen-2", version: "6", lastPly: "2", lastSan: "e5" });
   });
 });
 
 describe("buildWrites for an eval", () => {
-  const payload = { gameId: "g1", ply: 7, version: 7, evalCp: -35, evalMate: null };
+  const payload = { gameId: "g1", ply: 7, version: 7, evalCp: -35, evalMate: null, bestReply: "Nf3" };
 
   it("streams the eval and caches it only for the newest ply", () => {
     const latest = buildWrites({ eventType: "EvalUpdated", payload: { ...payload, latest: true } });
-    expect(latest.stream).toMatchObject({ type: "EvalUpdated", ply: "7", version: "7", evalCp: "-35", evalMate: "" });
-    expect(latest.cache).toEqual({ evalPly: "7", evalVersion: "7", evalCp: "-35", evalMate: "" });
+    expect(latest.stream).toMatchObject({ type: "EvalUpdated", ply: "7", version: "7", evalCp: "-35", evalMate: "", bestReply: "Nf3" });
+    expect(latest.cache).toEqual({ evalPly: "7", evalVersion: "7", evalCp: "-35", evalMate: "", evalBest: "Nf3" });
     const backfill = buildWrites({ eventType: "EvalUpdated", payload: { ...payload, latest: false } });
     expect(backfill.cache).toBeNull();
   });

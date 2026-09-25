@@ -14,6 +14,7 @@ export interface LiveEvent {
   result: string;
   evalCp: string;
   evalMate: string;
+  bestReply: string;
 }
 
 export interface Socket {

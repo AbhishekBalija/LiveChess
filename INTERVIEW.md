@@ -38,6 +38,9 @@ Stockfish runs as its own process and we only talk to it over UCI, a plain text 
 **Q: Why a fixed node count instead of a time limit?**
 With a time limit, the same position gets a deeper search on a quiet server and a shallower one under load, so its eval changes with server load. The move classifier compares evals between moves, so that noise would look like mistakes. A fixed node count does the same work every time and gives the same answer.
 
+**Q: Stockfish says `e7e8q` but the move list says `e8=Q+`. How do you compare them?**
+Stockfish speaks UCI notation (from square, to square, promotion piece), while PGN and the move list use SAN (piece letter, capture, check and mate marks). SAN depends on the position: `Nbd2` versus `Nd2` depends on whether another knight can also go there. So the worker converts once, on the server, by playing the UCI move in chess.js from the position Stockfish searched and reading back its SAN. The Best label is then a plain string match with the move that was played. The stored best move belongs to the position after a ply, so the next ply is compared with it.
+
 **Q: How does the worker pick what to analyze without a job queue?**
 Its to-do list is a query: live moves with no eval yet, a game's newest move first, most recently active games first, older moves after. A partial index keeps it small once the backlog is done. No queue state means a restart just carries on, and nothing can get lost between a queue and the database. When the worker saves a result it updates the move only if it is still live; if a correction superseded it mid-search, the update matches nothing and the result is dropped.
 

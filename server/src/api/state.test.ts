@@ -65,11 +65,12 @@ describe("getGameState cache fast path", () => {
         evalVersion: "2",
         evalCp: "",
         evalMate: "-3",
+        evalBest: "Qxf7#",
       }),
     };
     const db = {} as StateDbPort;
     const res = await getGameState(db, cache, GID, 2);
-    expect(res.evals).toEqual([{ ply: 2, version: 2, cp: null, mate: -3 }]);
+    expect(res.evals).toEqual([{ ply: 2, version: 2, cp: null, mate: -3, best: "Qxf7#" }]);
   });
 
   it("goes to Postgres when the client is behind the cache", async () => {
@@ -114,8 +115,8 @@ describe("getGameState cache fast path", () => {
 
   it("returns every stored eval on the Postgres path, not only missed moves", async () => {
     const evals = [
-      { ply: 1, version: 1, cp: 30, mate: null },
-      { ply: 2, version: 2, cp: 25, mate: null },
+      { ply: 1, version: 1, cp: 30, mate: null, best: "e5" },
+      { ply: 2, version: 2, cp: 25, mate: null, best: null },
     ];
     const db: StateDbPort = {
       listEvals: async () => evals,

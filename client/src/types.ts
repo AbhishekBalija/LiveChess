@@ -21,6 +21,8 @@ export interface EvalRow {
   version: number
   cp: number | null
   mate: number | null
+  // Best reply from this position (SAN), for the next move's Best label.
+  best: string | null
 }
 
 export interface GameStateResponse {

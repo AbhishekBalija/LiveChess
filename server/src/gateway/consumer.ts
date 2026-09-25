@@ -26,6 +26,7 @@ export function entryToEvent(fields: Record<string, string>): LiveEvent {
     result: fields["result"] ?? "",
     evalCp: fields["evalCp"] ?? "",
     evalMate: fields["evalMate"] ?? "",
+    bestReply: fields["bestReply"] ?? "",
   };
 }
 
