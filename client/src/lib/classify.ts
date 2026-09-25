@@ -5,15 +5,17 @@ import type { LiveMove, MoveEval } from "./game"
 // from the Evals before and after it. The rules are Lichess's, exactly
 // (docs/research/move-classification.md): the mover's winning chances
 // dropping 5, 10 or 15 points on a 0-100 scale, plus its mate table.
-// Best is the engine's own choice from the position before the move, and
-// Brilliant is a Best move that sacrifices material.
+// Best is the engine's own choice from the position before the move,
+// Great is a Best move that was the only good one, and Brilliant is a Best
+// move that sacrifices material.
 
-export type Classification = "brilliant" | "best" | "miss" | "inaccuracy" | "mistake" | "blunder"
+export type Classification = "brilliant" | "great" | "best" | "miss" | "inaccuracy" | "mistake" | "blunder"
 
 // How each label looks: its name, the badge glyph, and its colour token
 // (index.css).
 export const CLASSIFICATION_STYLE: Record<Classification, { name: string; glyph: string; color: string }> = {
   brilliant: { name: "Brilliant", glyph: "!!", color: "var(--cls-brilliant)" },
+  great: { name: "Great", glyph: "!", color: "var(--cls-great)" },
   best: { name: "Best", glyph: "★", color: "var(--cls-best)" },
   miss: { name: "Miss", glyph: "×", color: "var(--cls-miss)" },
   inaccuracy: { name: "Inaccuracy", glyph: "?!", color: "var(--cls-inaccuracy)" },
@@ -84,19 +86,42 @@ function labelAt(moves: Map<number, LiveMove>, ply: number): Classification | nu
 // A Best move is Brilliant when it gives up material (checked on the
 // server), leaves the mover at 50% or better, and was played from under
 // 90%: a sacrifice when already completely winning is not special.
+// The win% (0-100) of the player who moved at `ply`, from an eval of a
+// position where `sideToMove` is to move.
+function moverPercent(ply: number, e: MoveEval, sideToMove: "white" | "black"): number {
+  const percent = whiteWinPercent(e, sideToMove)
+  return ply % 2 === 1 ? percent : 100 - percent
+}
+
+function sides(ply: number) {
+  const white = ply % 2 === 1
+  return { mover: white ? "white" : "black", opponent: white ? "black" : "white" } as const
+}
+
 function isBrilliant(moves: Map<number, LiveMove>, ply: number): boolean {
   const move = moves.get(ply)
   const before = moves.get(ply - 1)?.eval
   if (!move?.sacrifice || !move.eval || !before) return false
-  const white = ply % 2 === 1
-  const moverPercent = (e: MoveEval, sideToMove: "white" | "black") => {
-    const percent = whiteWinPercent(e, sideToMove)
-    return white ? percent : 100 - percent
-  }
   // Before the move the mover is to move; after it, the opponent is.
-  const mover = white ? "white" : "black"
-  const opponent = white ? "black" : "white"
-  return moverPercent(before, mover) < 90 && moverPercent(move.eval, opponent) >= 50
+  const { mover, opponent } = sides(ply)
+  return moverPercent(ply, before, mover) < 90 && moverPercent(ply, move.eval, opponent) >= 50
+}
+
+// A Best move is Great when it was the only good one: the best of the
+// other moves (searched by the server) would have cost at least 10 win%
+// points. Both scores are for the position before the move.
+// Two guards keep it rare (docs/research/move-classification.md): taking
+// back material right after the opponent took some is the obvious move,
+// not a find, and an only move that still leaves the mover worse off did
+// not save anything.
+function isGreat(moves: Map<number, LiveMove>, ply: number): boolean {
+  const move = moves.get(ply)
+  const before = moves.get(ply - 1)
+  if (!move?.eval || !before?.eval || !before.second) return false
+  if (move.san.includes("x") && before.san.includes("x")) return false
+  const { mover, opponent } = sides(ply)
+  if (moverPercent(ply, move.eval, opponent) < 50) return false
+  return moverPercent(ply, before.eval, mover) - moverPercent(ply, before.second, mover) >= 10
 }
 
 const isError = (label: Classification | null) => label === "mistake" || label === "blunder"
@@ -112,5 +137,6 @@ export function classifyMove(moves: Map<number, LiveMove>, ply: number): Classif
   if (label) return label
   const best = moves.get(ply - 1)?.bestReply
   if (best === undefined || best !== moves.get(ply)?.san) return null
-  return isBrilliant(moves, ply) ? "brilliant" : "best"
+  if (isBrilliant(moves, ply)) return "brilliant"
+  return isGreat(moves, ply) ? "great" : "best"
 }

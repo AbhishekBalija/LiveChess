@@ -48,7 +48,9 @@ export interface Search {
 }
 
 export interface EnginePort {
-  evaluate(fen: string, nodes: number): Promise<Search>;
+  // `searchmoves` limits the search to those moves (UCI), for the
+  // second-best score the Great label needs.
+  evaluate(fen: string, nodes: number, searchmoves?: string[]): Promise<Search>;
 }
 
 // One long-lived Stockfish process, one search at a time.
@@ -83,10 +85,12 @@ export class Stockfish implements EnginePort {
 
   // Fixed node count, so the same position always gets the same eval
   // whatever the server load is (ADR 0006).
-  async evaluate(fen: string, nodes: number): Promise<Search> {
+  async evaluate(fen: string, nodes: number, searchmoves: string[] = []): Promise<Search> {
     let last: Eval | null = null;
     this.send(`position fen ${fen}`);
-    this.send(`go nodes ${nodes}`);
+    // searchmoves takes every token after it, so it has to come last.
+    const only = searchmoves.length > 0 ? ` searchmoves ${searchmoves.join(" ")}` : "";
+    this.send(`go nodes ${nodes}${only}`);
     const bestLine = await this.until("bestmove", (line) => {
       last = parseScore(line) ?? last;
     });

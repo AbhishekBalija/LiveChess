@@ -492,6 +492,31 @@ Takeaways, with that caveat:
    Blunder, the mover was then winning, and after this move is not.
 5. Great and the second-line data as a separate decision.
 
+### Great: how often the extra search runs (measured for #73)
+
+Local dev database, 28 real Lichess broadcast games (mixed opens, not only
+elite), 2,761 moves with a stored best move for the position before them:
+1,513 (54.8%) were the engine's best move, 84 of those in tablebase
+positions. So a second search "only after Best plies" is not rare: it is
+roughly 55% more Stockfish time. Decision and cost in ADR 0006.
+
+How often the plain rule ("every other move is 10+ win% points worse")
+fires, from 400 random Best moves in those games, each given the second
+search at 300k nodes (the average game there is 91 plies, about 50 Best
+moves):
+
+| Rule | Great among Best moves | Per game |
+|---|---|---|
+| Plain rule | 79 (19.8%) | ~10 |
+| Not a capture right after the opponent's capture | 46 (11.5%) | ~6 |
+| That, and the mover at 50%+ after the move | 29 (7.3%) | ~3.5 |
+
+33 of the 79 were recaptures or trades being completed (9.bxc3 after
+Bxc3+, 34.Qxe5 after Qxd6): every other move loses material, but nobody
+calls taking back a piece a great find. Both guards follow WintrChess
+(no Great for taking a free piece, none when the mover is worse after the
+move). LiveChess uses the third row: about 3-4 Great moves per game.
+
 ### Sacrifice threshold (decided for #72)
 
 Chess.com's own article

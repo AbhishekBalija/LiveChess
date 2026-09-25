@@ -25,6 +25,10 @@ export interface EvalRow {
   best: string | null
   // Whether the move that reached this position gave up material net.
   sacrifice: boolean | null
+  // Score of the best other move from this position (Great label), from
+  // White's side; both null when the server did not search it.
+  secondCp: number | null
+  secondMate: number | null
 }
 
 export interface GameStateResponse {

@@ -41,6 +41,10 @@ export interface EvalRow {
   best: string | null;
   // Whether the move that reached this position gave up material net.
   sacrifice: boolean | null;
+  // Score of the best other move from this position (Great label), from
+  // White's side; both null when it was not searched.
+  secondCp: number | null;
+  secondMate: number | null;
 }
 
 // Narrow Postgres surface getGameState needs. Drizzle adapter below
@@ -151,7 +155,11 @@ export function drizzleStateDb(database: Db): StateDbPort {
     },
     async listEvals(gameId) {
       return database
-        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate, best: moves.bestReply, sacrifice: moves.sacrifice })
+        .select({ ply: moves.ply, version: moves.version, cp: moves.evalCp, mate: moves.evalMate, best: moves.bestReply,
+          sacrifice: moves.sacrifice,
+          secondCp: moves.secondCp,
+          secondMate: moves.secondMate,
+        })
         .from(moves)
         .where(
           and(
@@ -179,7 +187,18 @@ function parseCachedEval(hash: Record<string, string>): EvalRow[] {
   const version = Number(hash["evalVersion"]);
   if (!hash["evalPly"] || !Number.isInteger(ply) || !Number.isInteger(version)) return [];
   const num = (raw: string | undefined): number | null => (raw ? Number(raw) : null);
-  return [{ ply, version, cp: num(hash["evalCp"]), mate: num(hash["evalMate"]), best: hash["evalBest"] || null, sacrifice: parseFlag(hash["evalSacrifice"]) }];
+  return [
+    {
+      ply,
+      version,
+      cp: num(hash["evalCp"]),
+      mate: num(hash["evalMate"]),
+      best: hash["evalBest"] || null,
+      sacrifice: parseFlag(hash["evalSacrifice"]),
+      secondCp: num(hash["evalSecondCp"]),
+      secondMate: num(hash["evalSecondMate"]),
+    },
+  ];
 }
 
 function parseCacheSnapshot(

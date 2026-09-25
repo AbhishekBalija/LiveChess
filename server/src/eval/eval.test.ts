@@ -119,10 +119,13 @@ function reply(status: number, body: unknown): HttpResponse {
 describe("Evaluator source choice", () => {
   function setup(tablebase: () => HttpResponse) {
     const calls = { engine: 0, http: 0 };
+    const searchmoves: string[][] = [];
     const engine: EnginePort = {
-      evaluate: async () => {
+      // The full search finds Nf3 at +12; a search without it finds -40.
+      evaluate: async (_fen, _nodes, only = []) => {
         calls.engine += 1;
-        return { eval: { cp: 12, mate: null }, bestMove: "g1f3" };
+        searchmoves.push(only);
+        return only.length > 0 ? { eval: { cp: -40, mate: null }, bestMove: "d2d4" } : { eval: { cp: 12, mate: null }, bestMove: "g1f3" };
       },
     };
     const http: HttpPort = {
@@ -133,19 +136,47 @@ describe("Evaluator source choice", () => {
     };
     let now = 0;
     const evaluator = new Evaluator(engine, http, 1000, () => now);
-    return { evaluator, calls, advance: (ms: number) => (now += ms) };
+    return { evaluator, calls, searchmoves, advance: (ms: number) => (now += ms) };
   }
 
   it("uses the tablebase for 7 pieces or fewer and Stockfish otherwise", async () => {
-    const { evaluator, calls } = setup(() => reply(200, { category: "win", moves: [{ uci: "h7h8q", san: "h8=Q+" }] }));
+    // Tablebase moves are scored for the opponent: "loss" is the mover's win.
+    const { evaluator, calls } = setup(() =>
+      reply(200, {
+        category: "win",
+        moves: [
+          { uci: "h7h8q", san: "h8=Q+", category: "loss" },
+          { uci: "g7g8", san: "Kg8", category: "draw" },
+        ],
+      }),
+    );
     await expect(evaluator.evaluate(ENDGAME)).resolves.toEqual({
       eval: { cp: TABLEBASE_WIN_CP, mate: null },
       source: "tablebase",
       best: "h8=Q+",
+      second: { cp: 0, mate: null },
     });
     // Stockfish's UCI best move comes back as SAN.
-    await expect(evaluator.evaluate(WHITE_TO_MOVE)).resolves.toMatchObject({ source: "stockfish", best: "Nf3" });
+    await expect(evaluator.evaluate(WHITE_TO_MOVE, "d4")).resolves.toMatchObject({ source: "stockfish", best: "Nf3" });
     expect(calls).toEqual({ engine: 1, http: 1 });
+  });
+
+  it("searches the other moves only when the next move is the best one or not played yet", async () => {
+    const { evaluator, calls, searchmoves } = setup(() => reply(200, {}));
+    // Next move not played yet: search the others right away.
+    await expect(evaluator.evaluate(WHITE_TO_MOVE)).resolves.toMatchObject({
+      best: "Nf3",
+      second: { cp: -40, mate: null },
+    });
+    // Every legal move except the best one, in UCI.
+    expect(searchmoves[1]).toHaveLength(new Chess(WHITE_TO_MOVE).moves().length - 1);
+    expect(searchmoves[1]).not.toContain("g1f3");
+    expect(searchmoves[1]).toContain("e4e5");
+    // The best move was played: searched too.
+    await expect(evaluator.evaluate(WHITE_TO_MOVE, "Nf3")).resolves.toMatchObject({ second: { cp: -40, mate: null } });
+    // Another move was played: no Great label possible, no second search.
+    await expect(evaluator.evaluate(WHITE_TO_MOVE, "d4")).resolves.toMatchObject({ second: null });
+    expect(calls.engine).toBe(5);
   });
 
   it("pauses tablebase lookups for a minute after a 429", async () => {
@@ -194,28 +225,29 @@ describe.runIf(URL)("eval worker integration", () => {
 
     const newest = await nextJob(database);
     // The job carries the FEN before the move, for the sacrifice check.
-    expect(newest).toMatchObject({ gameId: g.id, ply: 2, version: 2, latest: true, prevFen: BLACK_TO_MOVE });
+    expect(newest).toMatchObject({ gameId: g.id, ply: 2, version: 2, latest: true, prevFen: BLACK_TO_MOVE, nextSan: null });
     if (!newest) throw new Error("no job");
     await expect(
-      saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish", best: "Nf3" }, false),
+      saveEval(database, newest, { eval: { cp: 20, mate: null }, source: "stockfish", best: "Nf3", second: { cp: -60, mate: null } }, false),
     ).resolves.toBe(true);
     const [event] = await database.select().from(outboxEvents).orderBy(desc(outboxEvents.id)).limit(1);
     expect(event).toMatchObject({
       eventType: "EvalUpdated",
-      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, bestReply: "Nf3", sacrifice: false, latest: true },
+      payload: { gameId: g.id, ply: 2, version: 2, evalCp: 20, evalMate: null, bestReply: "Nf3", secondCp: -60, secondMate: null, sacrifice: false, latest: true },
     });
     const [stored] = await database
-      .select({ best: moves.bestReply, sacrifice: moves.sacrifice })
+      .select({ best: moves.bestReply, secondCp: moves.secondCp, sacrifice: moves.sacrifice })
       .from(moves)
       .where(eq(moves.id, newest.moveId));
-    expect(stored).toEqual({ best: "Nf3", sacrifice: false });
+    expect(stored).toEqual({ best: "Nf3", secondCp: -60, sacrifice: false });
 
     const backfill = await nextJob(database);
-    expect(backfill).toMatchObject({ gameId: g.id, ply: 1, latest: false, prevFen: null });
+    // Ply 1's next move (e5) is known, so the job says what it was.
+    expect(backfill).toMatchObject({ gameId: g.id, ply: 1, latest: false, prevFen: null, nextSan: "e5" });
     if (!backfill) throw new Error("no job");
     // A Correction supersedes the row while the search runs.
     await database.update(moves).set({ superseded: true }).where(eq(moves.id, backfill.moveId));
-    await expect(saveEval(database, backfill, { eval: { cp: 30, mate: null }, source: "stockfish", best: null })).resolves.toBe(false);
+    await expect(saveEval(database, backfill, { eval: { cp: 30, mate: null }, source: "stockfish", best: null, second: null })).resolves.toBe(false);
     const [row] = await database
       .select({ evalSource: moves.evalSource })
       .from(moves)
@@ -256,7 +288,7 @@ describe.runIf(URL)("eval worker integration", () => {
     const first = await nextJob(database, [watchedGame]);
     expect(first).toMatchObject({ gameId: watchedGame, ply: 2 });
     if (!first) throw new Error("no job");
-    await saveEval(database, first, { eval: { cp: 10, mate: null }, source: "stockfish", best: null });
+    await saveEval(database, first, { eval: { cp: 10, mate: null }, source: "stockfish", best: null, second: null });
     // The watched game's older ply still beats the other game's newest one.
     await expect(nextJob(database, [watchedGame])).resolves.toMatchObject({ gameId: watchedGame, ply: 1 });
     await sql.end();

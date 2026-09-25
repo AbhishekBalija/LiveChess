@@ -18,6 +18,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
   best featured pick among its tours.
 
 ### Added
+- Great move label (#73): a blue `!` for a Best move that was the only
+  good one, where the best of the other moves would have cost at least 10
+  win% points. Not for a capture right after the opponent's capture, and
+  not when the mover is below 50% after the move, which keeps it to about
+  3-4 per game on real broadcasts. The eval worker runs a second search at the same nodes,
+  limited to every other legal move (`searchmoves`), when the next move
+  was the engine's choice or is not played yet; tablebase positions use
+  the second move in its list. Stored in new nullable `moves.second_cp`
+  and `second_mate` columns (migration 0011, no backfill) and sent with
+  `EvalUpdated` and state/resync. ADR 0006 amended.
 - Brilliant move label (#72): a teal `!!` for a Best move that gives up
   material, leaves the mover at 50%+ win chance and was played from under
   90%. The eval worker checks each move for a sacrifice with a small

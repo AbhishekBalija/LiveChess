@@ -19,6 +19,9 @@ export interface EvalJob {
   // FEN before this move (the previous live ply's), for the sacrifice
   // check. Null for ply 1 or when that row is missing.
   prevFen: string | null;
+  // SAN of the move played after this one, null while it is not played
+  // yet. Decides whether the Great label's second search is needed.
+  nextSan: string | null;
   // The move row's Version, so clients can tell which move this eval is for.
   version: number;
   // The game's newest ply when the job was picked.
@@ -38,6 +41,10 @@ export async function nextJob(database: Db, watched: string[] = []): Promise<Eva
     select prev.fen from moves prev
     where prev.game_id = ${moves.gameId} and prev.ply = ${moves.ply} - 1 and prev.superseded = false
   )`;
+  const nextSan = sql<string | null>`(
+    select next.san from moves next
+    where next.game_id = ${moves.gameId} and next.ply = ${moves.ply} + 1 and next.superseded = false
+  )`;
   const order = [desc(latest), desc(games.updatedAt), desc(moves.ply)];
   if (watched.length > 0) order.unshift(desc(inArray(moves.gameId, watched)));
   const [row] = await database
@@ -47,6 +54,7 @@ export async function nextJob(database: Db, watched: string[] = []): Promise<Eva
       ply: moves.ply,
       fen: moves.fen,
       prevFen,
+      nextSan,
       version: moves.version,
       latest,
     })
@@ -65,6 +73,9 @@ export interface EvalResult {
   source: EvalSource;
   // Best reply from this position, as SAN (Move classification: Best).
   best: string | null;
+  // Score of the best move other than `best` (Move classification:
+  // Great). Null when it was not searched.
+  second: Eval | null;
 }
 
 // Stockfish's UCI move ("e7e8q") as SAN ("e8=Q+"), from the position it
@@ -76,6 +87,14 @@ export function uciToSan(fen: string, uci: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Every legal move except `bestMove`, in UCI, for a searchmoves search.
+export function otherMoves(fen: string, bestMove: string): string[] {
+  return new Chess(fen)
+    .moves({ verbose: true })
+    .map((m) => m.lan)
+    .filter((uci) => uci !== bestMove);
 }
 
 // Picks the source for one position: the tablebase for 7 pieces or fewer
@@ -90,13 +109,15 @@ export class Evaluator {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async evaluate(fen: string): Promise<EvalResult> {
+  // `next` is the SAN of the move played from this position, or null
+  // while it is not played yet.
+  async evaluate(fen: string, next: string | null = null): Promise<EvalResult> {
     // Stockfish can crash on a malformed FEN, so never hand it one.
-    if (!validateFen(fen).ok) return { eval: { cp: null, mate: null }, source: "invalid", best: null };
+    if (!validateFen(fen).ok) return { eval: { cp: null, mate: null }, source: "invalid", best: null, second: null };
     if (this.now() >= this.tablebasePausedUntil) {
       try {
         const exact = await tablebaseEval(this.http, fen);
-        if (exact) return { eval: exact.eval, source: "tablebase", best: exact.bestSan };
+        if (exact) return { eval: exact.eval, source: "tablebase", best: exact.bestSan, second: exact.second };
       } catch (err) {
         if (err instanceof TablebaseRateLimited) this.tablebasePausedUntil = this.now() + 60_000;
         else console.warn("tablebase lookup failed, using stockfish", err);
@@ -104,7 +125,16 @@ export class Evaluator {
     }
     const search = await this.engine.evaluate(fen, this.nodes);
     const best = search.bestMove === null ? null : uciToSan(fen, search.bestMove);
-    return { eval: search.eval, source: "stockfish", best };
+    // The Great label compares the best move with the best of the others,
+    // searched at the same nodes so the two scores are comparable. Only
+    // needed when the next move was the best one, or is not played yet
+    // (ADR 0006).
+    let second: Eval | null = null;
+    if (search.bestMove !== null && best !== null && (next === null || next === best)) {
+      const others = otherMoves(fen, search.bestMove);
+      if (others.length > 0) second = (await this.engine.evaluate(fen, this.nodes, others)).eval;
+    }
+    return { eval: search.eval, source: "stockfish", best, second };
   }
 }
 
@@ -122,7 +152,12 @@ export async function saveEval(
   return database.transaction(async (tx) => {
     const updated = await tx
       .update(moves)
-      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source, bestReply: result.best, sacrifice })
+      .set({ evalCp: result.eval.cp, evalMate: result.eval.mate, evalSource: result.source,
+        bestReply: result.best,
+        secondCp: result.second?.cp ?? null,
+        secondMate: result.second?.mate ?? null,
+        sacrifice,
+      })
       .where(and(eq(moves.id, job.moveId), eq(moves.superseded, false)))
       .returning({ id: moves.id });
     if (updated.length === 0 || result.source === "invalid") return false;
@@ -135,6 +170,8 @@ export async function saveEval(
         evalCp: result.eval.cp,
         evalMate: result.eval.mate,
         bestReply: result.best,
+        secondCp: result.second?.cp ?? null,
+        secondMate: result.second?.mate ?? null,
         sacrifice,
         latest: job.latest,
       },
@@ -149,6 +186,6 @@ export async function evalOnce(database: Db, evaluator: Evaluator, watched: stri
   const job = await nextJob(database, watched);
   if (!job) return false;
   const sacrifice = job.prevFen === null ? null : isSacrifice(job.prevFen, job.fen);
-  await saveEval(database, job, await evaluator.evaluate(job.fen), sacrifice);
+  await saveEval(database, job, await evaluator.evaluate(job.fen, job.nextSan), sacrifice);
   return true;
 }

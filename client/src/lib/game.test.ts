@@ -27,7 +27,7 @@ function snapshot(overrides: Partial<GameStateResponse> = {}): GameStateResponse
 }
 
 function event(overrides: Partial<LiveEvent> = {}): LiveEvent {
-  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, result: null, eval: null, bestReply: null, sacrifice: null, ...overrides }
+  return { type: "MoveReceived", gameId: GID, ply: 1, san: "e4", fen: "fen-1", clock: null, version: 1, result: null, eval: null, bestReply: null, sacrifice: null, second: null, ...overrides }
 }
 
 describe("parseLiveEvent", () => {
@@ -37,7 +37,7 @@ describe("parseLiveEvent", () => {
   it("parses string ply/version to numbers", () => {
     expect(
       parseLiveEvent(GID, { type: "MoveReceived", gameId: GID, ply: "3", san: "Bb5", fen: "fen-3", clock: "1:29:10", version: "3" }),
-    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3, result: null, eval: null, bestReply: null, sacrifice: null })
+    ).toEqual({ type: "MoveReceived", gameId: GID, ply: 3, san: "Bb5", fen: "fen-3", clock: "1:29:10", version: 3, result: null, eval: null, bestReply: null, sacrifice: null, second: null })
   })
 
   it("parses a GameResult, which may come before any move", () => {
@@ -122,11 +122,11 @@ describe("applyEvent", () => {
 
   it("puts an EvalUpdated on its exact move without touching Version", () => {
     const state = twoPlyState()
-    const out = applyEvent(state, event({ type: "EvalUpdated", ply: 2, san: "", fen: "", version: 2, eval: { cp: -20, mate: null }, bestReply: "Nf3", sacrifice: true }))
+    const out = applyEvent(state, event({ type: "EvalUpdated", ply: 2, san: "", fen: "", version: 2, eval: { cp: -20, mate: null }, bestReply: "Nf3", sacrifice: true, second: { cp: -90, mate: null } }))
     if (!("state" in out)) throw new Error("unexpected gap")
     expect(out.state.version).toBe(2)
     expect(out.state.moves.get(2)?.eval).toEqual({ cp: -20, mate: null })
-    expect(out.state.moves.get(2)).toMatchObject({ bestReply: "Nf3", sacrifice: true })
+    expect(out.state.moves.get(2)).toMatchObject({ bestReply: "Nf3", sacrifice: true, second: { cp: -90, mate: null } })
     // An eval for an older version of the ply (since corrected) is ignored.
     const stale = applyEvent(state, event({ type: "EvalUpdated", ply: 2, version: 1, eval: { cp: 5, mate: null } }))
     expect(stale).toEqual({ state })
@@ -134,23 +134,23 @@ describe("applyEvent", () => {
 
   it("parses eval fields from the gateway's strings", () => {
     expect(
-      parseLiveEvent(GID, { type: "EvalUpdated", gameId: GID, ply: "2", san: "", fen: "", version: "2", evalCp: "", evalMate: "-3", bestReply: "Qxf7#", sacrifice: "true" }),
-    ).toMatchObject({ eval: { cp: null, mate: -3 }, bestReply: "Qxf7#", sacrifice: true })
+      parseLiveEvent(GID, { type: "EvalUpdated", gameId: GID, ply: "2", san: "", fen: "", version: "2", evalCp: "", evalMate: "-3", bestReply: "Qxf7#", sacrifice: "true", secondCp: "-200", secondMate: "" }),
+    ).toMatchObject({ eval: { cp: null, mate: -3 }, bestReply: "Qxf7#", sacrifice: true, second: { cp: -200, mate: null } })
     expect(
       parseLiveEvent(GID, { type: "EvalUpdated", gameId: GID, ply: "2", san: "", fen: "", version: "2", evalCp: "5", evalMate: "", bestReply: "" }),
-    ).toMatchObject({ bestReply: null, sacrifice: null })
+    ).toMatchObject({ bestReply: null, sacrifice: null, second: null })
   })
 
   it("attaches resync evals only to the move version they were computed for", () => {
     const state = fromSnapshot(
       snapshot({
         evals: [
-          { ply: 1, version: 1, cp: 30, mate: null, best: "e5", sacrifice: false },
-          { ply: 2, version: 9, cp: 99, mate: null, best: "Nf3", sacrifice: true },
+          { ply: 1, version: 1, cp: 30, mate: null, best: "e5", sacrifice: false, secondCp: -80, secondMate: null },
+          { ply: 2, version: 9, cp: 99, mate: null, best: "Nf3", sacrifice: true, secondCp: null, secondMate: null },
         ],
       }),
     )
-    expect(state.moves.get(1)).toMatchObject({ eval: { cp: 30, mate: null }, bestReply: "e5", sacrifice: false })
+    expect(state.moves.get(1)).toMatchObject({ eval: { cp: 30, mate: null }, bestReply: "e5", sacrifice: false, second: { cp: -80, mate: null } })
     expect(state.moves.get(2)?.eval).toBeUndefined()
     expect(state.moves.get(2)?.bestReply).toBeUndefined()
   })

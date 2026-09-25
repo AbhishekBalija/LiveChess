@@ -78,6 +78,13 @@
       "when": 1790328943916,
       "tag": "0010_safe_mad_thinker",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790329799013,
+      "tag": "0011_clever_boomerang",
+      "breakpoints": true
     }
   ]
 }
